@@ -144,10 +144,10 @@ public class AssetDownloader : MonoBehaviour
             }
             else
             {
+                timerIsRunning = false;
+                timeRemaining = 0;
                 CallFunction();
                 DebugUtil.Log("Time has run out!");
-                timeRemaining = 0;
-                timerIsRunning = false;
                 Perform(); // Perform whatever needs to be done when time runs out
             }
         }
@@ -160,17 +160,23 @@ public class AssetDownloader : MonoBehaviour
         float minutes = Mathf.FloorToInt(timeToDisplay / 60);
         float seconds = Mathf.FloorToInt(timeToDisplay % 60);
 
-        timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
+        if (timerText != null)
+            timerText.text = string.Format("{0:00}:{1:00}", minutes, seconds);
     }
     void CallFunction()
     {
-        text.text = "";
+        if (text != null)
+            text.text = "";
+        int availableModelCount = api != null && api.allUrl != null ? api.allUrl.Count : 0;
+        if (modelCount >= availableModelCount)
+            return;
         
         // We are deleting the previous model, that's why we increment "modelCount" after the "if" loop. If "allUrl" is less than 3, then we need to keep models until the timer ends.
 
 
-        if (modelCount < api.allUrl.Count)
-            runtimeImportBehaviourHelper[modelCount].DisableObject();
+        RuntimeImportBehaviourHelper currentHelper = GetImportHelper(modelCount);
+        if (currentHelper != null)
+            currentHelper.DisableObject();
 
         // The variable "modelCount" is used to check the total number of models. Then, the "DisableObject()" method of the runtime import behavior helper corresponding to the model count is invoked.
         modelCount++;
@@ -178,18 +184,31 @@ public class AssetDownloader : MonoBehaviour
 
         //The "apiUrlCount" variable is used to understand the number of available models from the API. Here, we check if the model count is less than the total number of URLs retrieved from the API.
 
-        if (modelCount < api.allUrl.Count)
+        if (modelCount < availableModelCount)
         {
             api.MultipleModelCall();
-            runtimeImportBehaviourHelper[modelCount].customCallBack(PlayerPrefs.GetString("ModelScript"));
+            RuntimeImportBehaviourHelper nextHelper = GetImportHelper(modelCount);
+            if (nextHelper != null)
+                nextHelper.customCallBack(PlayerPrefs.GetString("ModelScript"));
           
-            annotationManager.MultipleModelCall(modelCount);
+            if (annotationManager != null)
+                annotationManager.MultipleModelCall(modelCount);
           
         }
     
        
 
 
+    }
+
+    private RuntimeImportBehaviourHelper GetImportHelper(int index)
+    {
+        if (runtimeImportBehaviourHelper != null && index >= 0 &&
+            index < runtimeImportBehaviourHelper.Length && runtimeImportBehaviourHelper[index] != null)
+            return runtimeImportBehaviourHelper[index];
+
+        Debug.LogWarning("[AssetDownloader] No model helper configured at index " + index + ".");
+        return null;
     }
 
     public void ChangeModelPosition()
