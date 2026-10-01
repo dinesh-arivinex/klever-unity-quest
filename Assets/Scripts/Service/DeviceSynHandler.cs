@@ -104,7 +104,7 @@ public class DeviceSynHandler : MonoBehaviour
 
     void Update()
     {
-        _heartbeatTimer += Time.deltaTime;
+        _heartbeatTimer += Time.unscaledDeltaTime;
         if (_heartbeatTimer >= HeartbeatSeconds)
         {
             _heartbeatTimer = 0f;
@@ -127,6 +127,7 @@ public class DeviceSynHandler : MonoBehaviour
         c.OnSessionControl += HandleSessionControl;
         c.OnCommand        += HandleCommand;
         c.Begin();
+        if (c.IsConnected) HandleMqttConnected();
     }
 
     private void HandleMqttConnected()
@@ -150,6 +151,17 @@ public class DeviceSynHandler : MonoBehaviour
         bool isStart = payload["isStart"].AsBool;
         bool isStop  = payload["isStop"].AsBool;
 
+        if (isStop)
+        {
+            Klass.Net.LiveViewPublisher.Instance?.TrackSessionState(false, false, true);
+            if (!isLobby && !isStopCalling)
+            {
+                isStopCalling = true;
+                LoadScene();
+            }
+            return;
+        }
+
         if (isFirstTime && !string.IsNullOrEmpty(payload["gradeId"]))
         {
             experienceId        = payload["experienceId"];
@@ -167,6 +179,13 @@ public class DeviceSynHandler : MonoBehaviour
         {
             isOpening = true;
             isLobby = false;
+            isOpenGame = true;
+            isSync = false;
+            _downloadProgress = 0;
+            _isPaused = false;
+            Time.timeScale = 1f;
+            AudioListener.pause = false;
+            PublishStateIfChanged(force: true);
 
             // Step 1: Enable the Welcome Scene panel immediately when Start is pressed.
             // This also sets isOpenWelcomeScreen = false, which is required by API.cs
@@ -217,11 +236,6 @@ public class DeviceSynHandler : MonoBehaviour
             }
         }
 
-        if (isStop && isOpening && !string.IsNullOrEmpty(payload["experienceId"]) && !isStopCalling)
-        {
-            isStartButtonPressed = false;
-            isStopCalling = true;
-        }
     }
 
     private void HandleCommand(JSONNode cmd)
@@ -323,8 +337,19 @@ public class DeviceSynHandler : MonoBehaviour
 
     public void LoadScene()
     {
-        isGameOver = true;
-        isCompletedDevice = true;
+        Time.timeScale = 1f;
+        AudioListener.pause = false;
+        _isPaused = false;
+        isStartButtonPressed = false;
+        isOpenGame = false;
+        isOpening = false;
+        isLobby = true;
+        isSync = false;
+        isGameOver = false;
+        isCompletedDevice = false;
+        _downloadProgress = 0;
+        _handRaised = false;
+        experienceId = null;
         PublishStateIfChanged(force: true);
         int currentSceneIndex = SceneManager.GetActiveScene().buildIndex;
         SceneManager.LoadScene(currentSceneIndex);
@@ -355,7 +380,7 @@ public class DeviceSynHandler : MonoBehaviour
         if (completed)          playState = "completed";
         else if (_isPaused)     playState = "paused";
         else if (synced)        playState = "playing";
-        else if (progress > 0)  playState = "downloading";
+        else if (!isLobby && isOpening) playState = "downloading";
         else                    playState = "idle";
 
         // Include pause + progress in the fingerprint so any change triggers a publish.

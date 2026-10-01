@@ -60,13 +60,15 @@ public class LoadingBar : MonoBehaviour
   
     public void CustomSumulatedLoading()
     {
-        StartCoroutine(GenerateRandomProgress());
         totalCount = 20;
+        SynchDevice();
+        StartCoroutine(GenerateRandomProgress());
     }
 
 
     public void SimulateLoading(RuntimeImportBehaviour finalScript)
     {
+        SynchDevice();
         // Null-guard: when the current experience has no 3D models the caller
         // (DownloadManager/ClassVrManager) may pass null because no
         // RuntimeImportBehaviour was activated. Previously this caused an
@@ -105,7 +107,7 @@ public class LoadingBar : MonoBehaviour
                 trackingEnabledAt30 = true;
             }
 
-            yield return new WaitForSeconds(waitTime); // Consistent, safe delay
+            yield return new WaitForSecondsRealtime(waitTime);
         }
 
         // Complete the progress bar at 100%.
@@ -161,10 +163,19 @@ public class LoadingBar : MonoBehaviour
     }
     public void SynchDevice()
     {
-        //if (blackSphere != null) blackSphere.SetActive(false);
-        //ToggleObject(true);
-        if (IsmodelDownload && StartGame != null)
-            StartGame.Invoke();
+        if (parentObject == null && transform.parent != null)
+            parentObject = transform.parent.gameObject;
+        if (parentObject != null) parentObject.SetActive(true);
+        gameObject.SetActive(true);
+        if (loadingScreen != null) loadingScreen.SetActive(true);
+        if (blackSphere != null) blackSphere.SetActive(false);
+        if (sliderNew != null) sliderNew.fillAmount = 0f;
+        if (progressText != null) progressText.text = "0%";
+        if (deviceSynHandler == null)
+            deviceSynHandler = FindObjectOfType<DeviceSynHandler>();
+        trackingEnabledAt30 = false;
+        isLoaded = false;
+        if (deviceSynHandler != null) deviceSynHandler.PublishDownloadProgress(0f);
     }
     public void ToggleObject(bool isTrue)
     {
