@@ -93,6 +93,18 @@ public class DeviceIDManager : MonoBehaviour
                 GamificationControllerHandSwitcher.Instance.leftControllerRaycast.SetActive(false);
                 GamificationControllerHandSwitcher.Instance.rightControllerRaycast.SetActive(false);
             }
+            if (response.message == "Device is not activated")
+            {
+                truePanel.SetActive(true);
+                // ToggleFunction(true);
+                //  apiManager.CallingClassVrExperiance();
+                gameObject.SetActive(false);
+                Invoke("ReloadScene", 1);
+                GamificationControllerHandSwitcher.Instance.leftHandRaycast.SetActive(false);
+                GamificationControllerHandSwitcher.Instance.rightHandRaycast.SetActive(false);
+                GamificationControllerHandSwitcher.Instance.leftControllerRaycast.SetActive(false);
+                GamificationControllerHandSwitcher.Instance.rightControllerRaycast.SetActive(false);
+            }
             else
             {
                 inputText.text = "";

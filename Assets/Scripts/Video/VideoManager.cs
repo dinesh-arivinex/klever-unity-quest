@@ -112,6 +112,18 @@ public class VideoManager : MonoBehaviour
         videoPlayerURL = PlayerPrefs.GetString(StaticStrings.videoUrl);
         Klass.Net.LiveViewPublisher.Instance?.ShowContent("video", videoPlayerURL, videoPlayerURL);
 
+        if (string.IsNullOrEmpty(videoPlayerURL))
+        {
+            Debug.LogWarning("[VideoManager] No video URL found. Skipping video playback.");
+            if (GameManager.Instance != null && GameManager.Instance.EnableClassAndBoard != null)
+            {
+                GameManager.Instance.EnableClassAndBoard.Invoke();
+            }
+            if (googleTextToSpeech != null) googleTextToSpeech.StopAudio();
+            Performe();
+            return;
+        }
+
         if (!string.IsNullOrEmpty(youtubeURL))
         {
             // Case: YouTube URL is provided

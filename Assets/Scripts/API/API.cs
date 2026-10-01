@@ -511,30 +511,30 @@ public class API : MonoBehaviour
     private void UpdateModelPreferences(Dictionary<string, string> modelId)
     {
         string modelName = modelId["modelName"];
-        string modelUrl = modelId["modelUrl"].Trim();
+        string modelUrl = !string.IsNullOrEmpty(modelId["modelUrl"]) ? modelId["modelUrl"].Trim() : "";
         string thumbnailUrl = modelId["thumbnailUrl"];
         string modelScript = modelId["script"];
 
-        PlayerPrefs.SetString(StaticStrings.modelName, modelName);
+        PlayerPrefs.SetString(StaticStrings.modelName, modelName ?? "");
         PlayerPrefs.SetString(StaticStrings.modelUrl, modelUrl);
-        PlayerPrefs.SetString(StaticStrings.thumbnailUrl, thumbnailUrl);
-        PlayerPrefs.SetString("ModelScript", modelScript);
+        PlayerPrefs.SetString(StaticStrings.thumbnailUrl, thumbnailUrl ?? "");
+        PlayerPrefs.SetString("ModelScript", modelScript ?? "");
         PlayerPrefs.Save(); // Save the changes to PlayerPrefs
     }
     private void UpdateVideoPreferences(JSONNode videoDetail)
     {
         string videoScript = videoDetail["script"];
         JSONNode videoId = videoDetail["VideoId"];
-        string videoURL = videoId["videoURL"].Value.Trim();
-        string videoTitle = videoId["title"];
-        string videoDescription = videoId["description"];
-        string videoThumbnail = videoId["thumbnail"];
-        string videoType = videoId["typeOfVideo"];
+        string videoURL = (videoId != null && videoId["videoURL"] != null) ? videoId["videoURL"].Value.Trim() : "";
+        string videoTitle = videoId != null ? (string)videoId["title"] : "";
+        string videoDescription = videoId != null ? (string)videoId["description"] : "";
+        string videoThumbnail = videoId != null ? (string)videoId["thumbnail"] : "";
+        string videoType = videoId != null ? (string)videoId["typeOfVideo"] : "";
         string videoSound = videoDetail["videoSound"];
         // VrManager.UpdateVideoType(videoType);
-        PlayerPrefs.SetString(StaticStrings.videoUrl, videoURL);
-        PlayerPrefs.SetString(StaticStrings.videoScript, videoScript);
-        PlayerPrefs.SetString(StaticStrings.videoSound, videoSound);
+        PlayerPrefs.SetString(StaticStrings.videoUrl, videoURL ?? "");
+        PlayerPrefs.SetString(StaticStrings.videoScript, videoScript ?? "");
+        PlayerPrefs.SetString(StaticStrings.videoSound, videoSound ?? "");
     }
     public void UpdateYoutubePreferance(bool youTubeVideoAudio, string youTubeVideoScript, string youTubeStartTimer, string youTubeEndTimer,string youTubeUrl,string youTubeDownloadableUrl,string status)
     {

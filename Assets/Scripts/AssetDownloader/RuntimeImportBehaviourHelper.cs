@@ -28,6 +28,12 @@ public class RuntimeImportBehaviourHelper : MonoBehaviour
         googleTextToSpeech = FindObjectOfType<GoogleTextToSpeech>();
         model = GameObject.FindWithTag(runtimeImportBehaviour.tagName);
 
+        if (model == null)
+        {
+            DebugUtil.Log("[RuntimeImportBehaviourHelper] No model found to set up (download was skipped).");
+            return;
+        }
+
         GameObject emptyObject = new GameObject("Parent");
         emptyObject.transform.localPosition =gameObject.transform.position;
         emptyObject.transform.rotation = Quaternion.identity;
@@ -43,7 +49,6 @@ public class RuntimeImportBehaviourHelper : MonoBehaviour
         var details = new SimpleJSON.JSONObject();
         details["name"] = PlayerPrefs.GetString(StaticStrings.modelName);
         Klass.Net.LiveViewPublisher.Instance?.ShowContent("model3d", modelUrl, modelUrl, details);
-
 
     }
     public void AddProperty(GameObject parentObject)

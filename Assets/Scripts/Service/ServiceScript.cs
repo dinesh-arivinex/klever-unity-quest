@@ -90,15 +90,25 @@ public class ServiceScript : MonoBehaviour
     }
     public void UrlCounter(int count)
     {
-        for(downloadedModel = 0; downloadedModel < count; downloadedModel++)
+        for (downloadedModel = 0; downloadedModel < count; downloadedModel++)
         {
-            loadModel[downloadedModel].GetComponent<RuntimeImportBehaviour>().StartDownloadingModel(api.allUrl[downloadedModel].Trim());
+            if (loadModel != null && downloadedModel < loadModel.Length && loadModel[downloadedModel] != null)
+            {
+                var behaviour = loadModel[downloadedModel].GetComponent<RuntimeImportBehaviour>();
+                string url = api.allUrl[downloadedModel];
+                if (behaviour != null)
+                {
+                    if (!string.IsNullOrEmpty(url))
+                    {
+                        behaviour.StartDownloadingModel(url.Trim());
+                    }
+                    else
+                    {
+                        behaviour.SkipDownload();
+                    }
+                }
+            }
         }
-       /* if(downloadedModel< count)
-        {
-            loadModel[downloadedModel].GetComponent<RuntimeImportBehaviour>().StartDownloadingModel(api.allUrl[downloadedModel]);
-        }
-        downloadedModel++;*/
     }
     
     public void AssignTaskBasedOnCondition(GameStatus currentStatus)

@@ -134,6 +134,12 @@ public class RuntimeImportBehaviour : MonoBehaviour
     {
         return isDownloadComplete;
     }
+    public void SkipDownload()
+    {
+        isDownloadComplete = true;
+        isLoaded = true;
+        OnAssetDownloaded?.Invoke();
+    }
     /// <summary>
     /// Unity callback that is invoked after every frame.
     /// Here we call MoveNext() to advance execution
