@@ -237,8 +237,10 @@ public class ServiceScript : MonoBehaviour
         
         if (runtimeImportBehaviourHelper!=null)
         {
-            
-            runtimeImport.enabled = false;
+            if (runtimeImport != null)
+            {
+                runtimeImport.enabled = false;
+            }
             yield return new WaitUntil(() => deviceSynHandler.isOpening);
             runtimeImportBehaviourHelper.CustomStartSpeak();
             videoManager.ThreeSixtyImagestatus(isThreeSixty);
