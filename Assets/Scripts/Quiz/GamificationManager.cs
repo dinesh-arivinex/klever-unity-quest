@@ -146,6 +146,7 @@ public class GamificationManager : MonoBehaviour
     {
         welcomeBoardText.SetActive(false);
         Wrapper wrapper = JsonUtility.FromJson<Wrapper>("{\"questions\":" + apiManager.assessmentsString + "}");
+        
         questions = wrapper.questions;
 
         List<AnswerData> currentOptions = new List<AnswerData>();
