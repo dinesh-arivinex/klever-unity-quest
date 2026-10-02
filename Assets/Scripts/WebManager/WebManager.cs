@@ -183,7 +183,8 @@ public class WebManager : MonoBehaviour
 
     private string BuildObjectXBrowserUrl(string embedUrl)
     {
-        return ObjectXLauncherUrl + "?src=" + Uri.EscapeDataString(embedUrl);
+        //return ObjectXLauncherUrl + "?src=" + Uri.EscapeDataString(embedUrl);
+        return embedUrl;
     }
 
     private string BuildAnubhavBrowserUrl(string embedUrl)
