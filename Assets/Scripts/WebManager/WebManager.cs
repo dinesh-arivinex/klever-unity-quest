@@ -120,7 +120,7 @@ public class WebManager : MonoBehaviour
                 GamificationControllerHandSwitcher.Instance.rightHandRaycast.SetActive(true);
                 GamificationControllerHandSwitcher.Instance.leftControllerRaycast.SetActive(true);
                 GamificationControllerHandSwitcher.Instance.rightControllerRaycast.SetActive(true);
-                
+
                 simulation.transform.position = temp.transform.position;
                 simulation.transform.rotation = temp.transform.rotation;
                 startingevent.Invoke();
@@ -139,11 +139,13 @@ public class WebManager : MonoBehaviour
                     if (url.Contains("vredumelzo"))
                     {
                         Application.OpenURL(BuildAnubhavBrowserUrl(url));
+                        StartCoroutine(KleverAppQuit());
 
                     }
                     else
                     {
                         Application.OpenURL(BuildObjectXBrowserUrl(url));
+                        StartCoroutine(KleverAppQuit());
 
                     }
 
@@ -262,5 +264,12 @@ public class WebManager : MonoBehaviour
         Destroy(webView);
         service.AssignTaskBasedOnCondition(GameStatus.Mcq);
         gamificationManager.AssignGames();
+    }
+    // Update is called once per frame
+
+    public IEnumerator KleverAppQuit()
+    {
+        yield return new WaitForSeconds(1f);
+        Application.Quit();
     }
 }

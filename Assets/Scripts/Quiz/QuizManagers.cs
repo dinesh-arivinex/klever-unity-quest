@@ -756,7 +756,7 @@ public class QuizManagers : MonoBehaviour
         }
 
         colliderTriggerMatch.Answer1HandGrab.gameObject.SetActive(false);
-        colliderTriggerMatch.Answer1HandGrab.gameObject.SetActive(false);
+        colliderTriggerMatch.Answer5HandGrab.gameObject.SetActive(false);
         colliderTriggerMatch.Answer2HandGrab.gameObject.SetActive(false);
         colliderTriggerMatch.Answer3HandGrab.gameObject.SetActive(false);
         colliderTriggerMatch.Answer4HandGrab.gameObject.SetActive(false);
