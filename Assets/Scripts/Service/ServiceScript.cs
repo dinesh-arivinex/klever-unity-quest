@@ -223,6 +223,14 @@ public class ServiceScript : MonoBehaviour
     }
     public void WithoutSkipModel()
     {
+        string modelUrl = PlayerPrefs.GetString(StaticStrings.modelUrl);
+        if (!string.IsNullOrEmpty(modelUrl))
+        {
+            var details = new SimpleJSON.JSONObject();
+            details["name"] = PlayerPrefs.GetString(StaticStrings.modelName);
+            Klass.Net.LiveViewPublisher.Instance?.ShowContent("3dmodel", modelUrl, modelUrl, details);
+        }
+
        // assetDownloader.timeRemaining = 0;
         WithoutSkippingModel.Invoke();
     }
