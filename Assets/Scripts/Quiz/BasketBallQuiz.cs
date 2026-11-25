@@ -196,8 +196,7 @@ public class BasketBallQuiz : MonoBehaviour
         {
             if (i < answerOptions.Count)
             {
-                var wrappers = answerButtons[i].GetComponents<InteractableUnityEventWrapper>();
-                interactableWrappers.AddRange(wrappers);
+
 
                 if (answerButtons[i] != null)
                 {
@@ -216,9 +215,9 @@ public class BasketBallQuiz : MonoBehaviour
                     SetOptionImage(answerButtons[i], answerOptions[i].imageUrl);
 
                     int answerIndex = i;
-                    answerButtons[i].onClick.AddListener(() => OnAnswerClick(answerIndex));
+                    AssessmentButtonBinding.Bind(answerButtons[i], answerIndex, OnAnswerClick);
 
-                    interactableWrappers[i].WhenSelect.AddListener(() => OnAnswerClick(answerIndex));
+
 
                 }
                 else
@@ -237,8 +236,15 @@ public class BasketBallQuiz : MonoBehaviour
 
     private void OnAnswerClick(int selectedAnswerIndex)
     {
-        if (!buttonClicked)
+        if (!buttonClicked && !LessonPause.IsPaused)
         {
+            var response = new SimpleJSON.JSONObject();
+            response["selectedIndex"] = selectedAnswerIndex;
+            response["selectedText"] = answers[selectedAnswerIndex].text;
+            response["selectedOptionId"] = answers[selectedAnswerIndex]._id ?? string.Empty;
+            response["isCorrect"] = answers[selectedAnswerIndex].isCorrect;
+            Klass.Net.LiveViewPublisher.Instance?.PublishAssessmentInteraction(gamificationManager.gameCount, response, true);
+
             Button clickedButton = answerButtons[selectedAnswerIndex];
             // Create colors with adjusted alpha values
             Color greenWithAlpha = new Color(Color.green.r, Color.green.g, Color.green.b, 95f / 255f);

@@ -384,6 +384,7 @@ public class QuizManagers : MonoBehaviour
 
     public void DisplayAllMatchIt(List<AnswerData> matchingOptions)
     {
+        matchingSubmitted = false;
         if (hasDisplayedAllMatchIt) return;
         hasDisplayedAllMatchIt = true;
 
@@ -553,8 +554,7 @@ public class QuizManagers : MonoBehaviour
         {
             if (i < answerOptions.Count)
             {
-                var wrappers = answerButtons[i].GetComponents<InteractableUnityEventWrapper>();
-                interactableWrappers.AddRange(wrappers);
+
                 if (answerButtons[i] != null)
                 {
                     answerButtons[i].gameObject.SetActive(true);
@@ -572,8 +572,8 @@ public class QuizManagers : MonoBehaviour
                     SetOptionImage(answerButtons[i], answerOptions[i].imageUrl);
 
                     int answerIndex = i;
-                    answerButtons[i].onClick.AddListener(() => OnAnswerClick(answerIndex));
-                    interactableWrappers[i].WhenSelect.AddListener(() => OnAnswerClick(answerIndex));
+                    AssessmentButtonBinding.Bind(answerButtons[i], answerIndex, OnAnswerClick);
+
                 }
 
             }
@@ -588,14 +588,14 @@ public class QuizManagers : MonoBehaviour
 
     private void OnAnswerClick(int selectedAnswerIndex)
     {
-        if (!buttonClicked)
+        if (!buttonClicked && !LessonPause.IsPaused)
         {
             var liveResponse = new SimpleJSON.JSONObject();
             liveResponse["selectedIndex"] = selectedAnswerIndex;
             liveResponse["selectedText"] = selectedAnswerIndex >= 0 && selectedAnswerIndex < answers.Count ? answers[selectedAnswerIndex].text : string.Empty;
-            liveResponse["selectedOptionId"] = selectedAnswerIndex >= 0 && selectedAnswerIndex < answers.Count ? answers[selectedAnswerIndex]._id : string.Empty;
+            liveResponse["selectedOptionId"] = selectedAnswerIndex >= 0 && selectedAnswerIndex < answers.Count ? (answers[selectedAnswerIndex]._id ?? string.Empty) : string.Empty;
             liveResponse["isCorrect"] = selectedAnswerIndex >= 0 && selectedAnswerIndex < answers.Count && answers[selectedAnswerIndex].isCorrect;
-            Klass.Net.LiveViewPublisher.Instance?.PublishAssessmentInteraction(currentQuestionIndex, liveResponse, false);
+            Klass.Net.LiveViewPublisher.Instance?.PublishAssessmentInteraction(gamificationManager.gameCount, liveResponse, true);
             Button clickedButton = answerButtons[selectedAnswerIndex];
             // Create colors with adjusted alpha values
             Color greenWithAlpha = new Color(Color.green.r, Color.green.g, Color.green.b, 95f / 255f);
@@ -660,6 +660,7 @@ public class QuizManagers : MonoBehaviour
 
     public void NextButtonClickFillIt()
     {
+        if (LessonPause.IsPaused) return;
         nextButton.enabled = false;
         nextButton.gameObject.GetComponent<BoxCollider>().enabled = false;
         for (int i = 0; i < answerButtons.Length; i++)
@@ -749,6 +750,17 @@ public class QuizManagers : MonoBehaviour
 
     public void MatchSubmit()
     {
+        if (LessonPause.IsPaused || matchingSubmitted) return;
+        matchingSubmitted = true;
+        for (int i = 0; i < answersMatchIt.Length && i < answerPlacedTextMatchIt.Length; i++)
+        {
+            if (answersMatchIt[i] == null || answerPlacedTextMatchIt[i] == null) continue;
+            var selected = answersMatchIt[i].GetComponent<TextMeshProUGUI>()?.text;
+            var expected = answerPlacedTextMatchIt[i].GetComponent<TextMeshProUGUI>()?.text;
+            if (string.IsNullOrWhiteSpace(selected) || string.IsNullOrWhiteSpace(expected)) continue;
+            RecordResponse(i, selected, selected == expected);
+        }
+
         if (matchItReferenceManager != null)
         {
             DisableImagesInArray(matchItReferenceManager.Questions);
@@ -886,6 +898,19 @@ public class QuizManagers : MonoBehaviour
         }
     }
 
+    private bool matchingSubmitted;
+    public void RecordFillAnswer(TextMeshProUGUI expected, string selected)
+    {
+        int index = System.Array.FindIndex(answerPlacedTextFillIt, obj => obj == expected.gameObject);
+        if (index >= 0 && !string.IsNullOrWhiteSpace(selected)) RecordResponse(index, selected, selected == expected.text);
+    }
+    private void RecordResponse(int index, string selected, bool correct)
+    {
+        var response = new SimpleJSON.JSONObject();
+        response["selectedText"] = selected;
+        response["isCorrect"] = correct;
+        Klass.Net.LiveViewPublisher.Instance?.PublishAssessmentInteraction(index, response, true);
+    }
     public IEnumerator NextEnable()
     {
         yield return new WaitForSeconds(2f);

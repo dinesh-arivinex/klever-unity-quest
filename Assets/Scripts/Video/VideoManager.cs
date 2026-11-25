@@ -88,6 +88,10 @@ public class VideoManager : MonoBehaviour
     }
     public void ChangeVideoType(string videoType)
     {
+        MediaHints hints = mediaPlayer.FallbackMediaHints;
+        hints.stereoPacking = videoType == "stereoscopic-side-to-side" ? StereoPacking.LeftRight :
+            videoType == "stereoscopic-top-to-bottom" ? StereoPacking.TopBottom : StereoPacking.None;
+        mediaPlayer.FallbackMediaHints = hints;
         /*  if (videoType == "stereoscopic-side-to-side")
           {
               MediaHints hints = mediaPlayer.FallbackMediaHints;
@@ -109,6 +113,11 @@ public class VideoManager : MonoBehaviour
     // Main play function
     public void PlayVideo()
     {
+        RestoreVideoAudio();
+        StopAllCoroutines();
+        CancelInvoke(nameof(Performe));
+        videoOpened = false;
+        videoCoroutine = null;
         videoPlayerURL = PlayerPrefs.GetString(StaticStrings.videoUrl);
         Klass.Net.LiveViewPublisher.Instance?.ShowContent("video", videoPlayerURL, videoPlayerURL);
 
@@ -290,6 +299,7 @@ public class VideoManager : MonoBehaviour
         
         if (string.IsNullOrEmpty(videoScript)||videoSound=="mute")
         {
+            RestoreVideoAudio();
             //   GetMediaInfo();
             StartCoroutine(GetMediaInfo());
 
@@ -304,6 +314,21 @@ public class VideoManager : MonoBehaviour
 
 
 
+    }
+
+    public void RestoreVideoAudio()
+    {
+        if (mediaPlayer == null) return;
+        mediaPlayer.AudioVolume = 1f;
+        mediaPlayer.AudioMuted = false;
+    }
+
+    public void ConfigureDirectVideoSource()
+    {
+        youtubeURL = null;
+        youtubeVideoStatus = null;
+        startTimer = 0f;
+        endTimer = 0f;
     }
 
     public void Seek()
@@ -354,6 +379,7 @@ public class VideoManager : MonoBehaviour
     private IEnumerator ActivateVideoEndAction(float duration)
     {
         yield return new WaitForSeconds(duration);
+        Klass.Net.LiveViewPublisher.Instance?.CompleteContent("video");
         if (!isThreeSixty)
         {
             service.AssignTaskBasedOnCondition(GameStatus.NoAudioInVideo);
@@ -368,6 +394,7 @@ public class VideoManager : MonoBehaviour
     }
     public void Performe()
     {
+        Klass.Net.LiveViewPublisher.Instance?.CompleteContent("video");
         if(videoCoroutine!=null)
         {
             StopCoroutine(videoCoroutine);
@@ -432,6 +459,7 @@ public class VideoManager : MonoBehaviour
             yield return new WaitForSeconds(duration);
         }
 
+        Klass.Net.LiveViewPublisher.Instance?.CompleteContent("video");
         // After video ends, trigger appropriate game
         
         if (!isThreeSixty)

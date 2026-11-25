@@ -170,7 +170,9 @@ public class API : MonoBehaviour
                     string sessionId = session != null ? session["_id"].Value : "";
                     string sessionTimeAndDate = session != null ? session["sessionTimeAndDate"].Value : "";
 
-                    JSONArray assessments = spaceData[0]["assessments"].AsArray;
+                    assessmentsString = string.Empty;
+                    typeOfGames.Clear();
+                    JSONArray assessments = Klever.VR.ContentCompatibility.Assessments(spaceData[0]);
                     if (assessments != null && assessments.Count > 0)
                     {
                         foreach (JSONNode assessment in assessments)
@@ -398,8 +400,6 @@ public class API : MonoBehaviour
                         bool isResuming = DeepLinkManager.isResumingFromDeepLink || (PlayerPrefs.GetInt("InSimulation", 0) == 1);
                         if (isResuming)
                         {
-                            PlayerPrefs.SetInt("InSimulation", 0);
-                            PlayerPrefs.Save();
                             DeepLinkManager.ResumeExperience();
                         }
                         else
@@ -524,13 +524,15 @@ public class API : MonoBehaviour
     private void UpdateVideoPreferences(JSONNode videoDetail)
     {
         string videoScript = videoDetail["script"];
-        JSONNode videoId = videoDetail["VideoId"];
-        string videoURL = (videoId != null && videoId["videoURL"] != null) ? videoId["videoURL"].Value.Trim() : "";
+        JSONNode videoId = Klever.VR.ContentCompatibility.VideoRecord(videoDetail);
+        string videoURL = Klever.VR.ContentCompatibility.VideoUrl(videoDetail);
+        videoManager.ConfigureDirectVideoSource();
         string videoTitle = videoId != null ? (string)videoId["title"] : "";
         string videoDescription = videoId != null ? (string)videoId["description"] : "";
         string videoThumbnail = videoId != null ? (string)videoId["thumbnail"] : "";
         string videoType = videoId != null ? (string)videoId["typeOfVideo"] : "";
         string videoSound = videoDetail["videoSound"];
+        videoManager.ChangeVideoType(videoType);
         // VrManager.UpdateVideoType(videoType);
         PlayerPrefs.SetString(StaticStrings.videoUrl, videoURL ?? "");
         PlayerPrefs.SetString(StaticStrings.videoScript, videoScript ?? "");

@@ -109,6 +109,7 @@ public class AnnotationManager : MonoBehaviour
         parentObject.transform.position = Vector3.zero;
         GrabObj.transform.position = Vector3.zero;
         GameObject objectsWithTag = GameObject.FindGameObjectWithTag(modelTagNames[modelCount]);
+        if (objectsWithTag == null) { Debug.LogError("[Model] Expected imported model is unavailable; cannot display this step."); return; }
         Transform childTransform = objectsWithTag.transform.parent;
         model = childTransform.gameObject;
         googleTextToSpeech = FindObjectOfType<GoogleTextToSpeech>();
@@ -121,7 +122,7 @@ public class AnnotationManager : MonoBehaviour
 
         //  model.transform.position=Vector3.zero;
 
-        if (orderOfAnnotation.Count > listexcicuter)
+        if (orderOfAnnotation != null && orderOfAnnotation.Count > listexcicuter)
         {
             if (orderOfAnnotation[listexcicuter] == orderExcicuter)
             {
@@ -146,7 +147,7 @@ public class AnnotationManager : MonoBehaviour
         }
 
 
-        Invoke("SetPosition", 2f);
+        // Placement completes in ChangePosition after imported bounds are ready.
         // SetPosition(); 
         modelCount++;
         modelTagNames.Add("VRModel" + modelCount.ToString());
@@ -159,12 +160,11 @@ public class AnnotationManager : MonoBehaviour
         // this functionn will works when we put annotation without bounding box
 
         yield return new WaitForSeconds(0.01f);
-        Transform child = model.transform.GetChild(0);
-        modelScale.StartActivitySingleObject(child.GetChild(0).gameObject);
-        child.GetChild(0).gameObject.transform.localPosition = Vector3.zero;
-        SetBoxColliderBasedOnSize(GrabObj);
-        assetDownloader.ChangeModelPosition();
-        SetBoxColliderBasedOnSize(GrabObj);
+        Klever.VR.LessonModelPlacement.PlaceOnTable(GrabObj, assetDownloader.instantiationPoint.position);
+        var questControls = GrabObj.GetComponent<Klever.VR.QuestLessonModelControls>();
+        if (questControls == null) questControls = GrabObj.AddComponent<Klever.VR.QuestLessonModelControls>();
+        questControls.Configure(model.transform);
+        assetDownloader.PublishVisibleModel();
     }
 
     Vector3 GetBottomPosition(GameObject obj)

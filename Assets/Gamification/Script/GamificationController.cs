@@ -29,7 +29,7 @@ public class GamificationController : MonoBehaviour
     {
         gamificationManager = GameManager.Instance.gamificationManager;
         gameNumber = 1;
-        startingTransform = startpoint_AHandMode.transform;
+        startingTransform = startpoint_AHandMode != null ? startpoint_AHandMode.transform : null;
     }
     public void ToggleCollider(bool isTrue)
     {

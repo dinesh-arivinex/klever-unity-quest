@@ -301,6 +301,7 @@ IEnumerator SendTextToSpeechRequest(string text)
                 currentAudioSource = ResolvePlaybackSource();
                 currentAudioSource.clip = audioClip;
                 currentAudioSource.Play();
+                Klever.VR.SessionPresentation.NarrationReady();
                 IsAudioReady = true;
                 // Wait for the audio to finish playing
                 audioClipLength = audioClip.length;

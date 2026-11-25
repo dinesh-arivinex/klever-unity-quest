@@ -89,7 +89,7 @@ public class GamificationManager : MonoBehaviour
     public List<List<AnswerData>> allAnswers = new List<List<AnswerData>>();
     private List<string> typeOfGame = new List<string>();
     private List<string> questionImageUrlList = new List<string>();
-    private int gameCount;
+    public int gameCount;
     //public  BasketBallQuiz[] gameType;
     private List<string> headingDetails = new List<string>();
     List<string[]> options = new List<string[]>();
@@ -119,6 +119,7 @@ public class GamificationManager : MonoBehaviour
   
     public void AssignGames()
     {
+        Debug.Log("[VR-FLOW] Assessment stage requested; dataPresent=" + !string.IsNullOrEmpty(apiManager.assessmentsString));
         if (googleTextToSpeech == null && GameManager.Instance != null)
         {
             googleTextToSpeech = GameManager.Instance.googleTextToSpeech;
@@ -146,7 +147,6 @@ public class GamificationManager : MonoBehaviour
     {
         welcomeBoardText.SetActive(false);
         Wrapper wrapper = JsonUtility.FromJson<Wrapper>("{\"questions\":" + apiManager.assessmentsString + "}");
-        
         questions = wrapper.questions;
 
         List<AnswerData> currentOptions = new List<AnswerData>();
@@ -182,20 +182,27 @@ public class GamificationManager : MonoBehaviour
         {
             // string nextGameName = selectedGames[currentGameIndex];
             currentGameName = currentGame;
+            Debug.Log("[VR-FLOW] Assessment type=" + currentGameName + "; question=" + (gameCount + 1));
             PublishCurrentAssessment();
-            if (!GamificationControllerHandSwitcher.Instance.isHandMode)
+            if (currentGameName == "MatchingFollowing" || currentGameName == "FillInTheBlanks")
+                for (int i = 0; i < (currentGameName == "MatchingFollowing" ? 5 : allOptions.Count); i++)
+                    Klass.Net.LiveViewPublisher.Instance?.ViewSimultaneousQuestion(i);
+            if (GamificationControllerHandSwitcher.Instance != null)
             {
-                GamificationControllerHandSwitcher.Instance.leftControllerRaycast.SetActive(false);
-                GamificationControllerHandSwitcher.Instance.rightControllerRaycast.SetActive(true);
-                GamificationControllerHandSwitcher.Instance.handPoseBall.SetActive(true);
-                //GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(true);
-            }
-            else
-            {
-                GamificationControllerHandSwitcher.Instance.leftHandRaycast.SetActive(false);
-                GamificationControllerHandSwitcher.Instance.rightHandRaycast.SetActive(true);
-                GamificationControllerHandSwitcher.Instance.handPoseBallHandMode.SetActive(true);
-                GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(false);
+                if (!GamificationControllerHandSwitcher.Instance.isHandMode)
+                {
+                    if (GamificationControllerHandSwitcher.Instance.leftControllerRaycast != null) GamificationControllerHandSwitcher.Instance.leftControllerRaycast.SetActive(false);
+                    if (GamificationControllerHandSwitcher.Instance.rightControllerRaycast != null) GamificationControllerHandSwitcher.Instance.rightControllerRaycast.SetActive(true);
+                    if (GamificationControllerHandSwitcher.Instance.handPoseBall != null) GamificationControllerHandSwitcher.Instance.handPoseBall.SetActive(true);
+                    //if (GamificationControllerHandSwitcher.Instance.rightHandMesh != null) GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(true);
+                }
+                else
+                {
+                    if (GamificationControllerHandSwitcher.Instance.leftHandRaycast != null) GamificationControllerHandSwitcher.Instance.leftHandRaycast.SetActive(false);
+                    if (GamificationControllerHandSwitcher.Instance.rightHandRaycast != null) GamificationControllerHandSwitcher.Instance.rightHandRaycast.SetActive(true);
+                    if (GamificationControllerHandSwitcher.Instance.handPoseBallHandMode != null) GamificationControllerHandSwitcher.Instance.handPoseBallHandMode.SetActive(true);
+                    if (GamificationControllerHandSwitcher.Instance.rightHandMesh != null) GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(false);
+                }
             }
             switch (currentGameName)
             {
@@ -221,7 +228,7 @@ public class GamificationManager : MonoBehaviour
                     arrowVisualizeHandMode.SetActive(true);
                     arrowVisualizeHandMode.GetComponent<MeshRenderer>().enabled = true;
                     crossbowHandMode.SetActive(true); 
-                    GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(false);
+                    if (GamificationControllerHandSwitcher.Instance != null && GamificationControllerHandSwitcher.Instance.rightHandMesh != null) GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(false);
                     break;
                 case "Basketball":
                    //  basketBallScore++;
@@ -235,16 +242,18 @@ public class GamificationManager : MonoBehaviour
                     crossbowHandMode.SetActive(false);
                     ballVisualize.SetActive(true);
                     ballVisualizeHandMode.SetActive(true);
-                    GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(false);
+                    if (GamificationControllerHandSwitcher.Instance != null && GamificationControllerHandSwitcher.Instance.rightHandMesh != null) GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(false);
                     gamificationCollider.SetActive(true);
                     basketballGame.GetComponent<BasketBallQuiz>().DisplayQuestion(headingDetails, allOptions[gameCount], questionlist[gameCount], questionImageUrlList[gameCount]);
                     break;
                 case "MCQ":
-                    crossbow.SetActive(false);
-                    crossbowHandMode.SetActive(false);
-                    ballVisualize.SetActive(false);
-                    ballVisualizeHandMode.SetActive(false);
-                    GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(true);
+                    // Some classrooms omit legacy hand/controller sports visuals.
+                    // They are optional when showing the ordinary MCQ panel.
+                    if (crossbow != null) crossbow.SetActive(false);
+                    if (crossbowHandMode != null) crossbowHandMode.SetActive(false);
+                    if (ballVisualize != null) ballVisualize.SetActive(false);
+                    if (ballVisualizeHandMode != null) ballVisualizeHandMode.SetActive(false);
+                    if (GamificationControllerHandSwitcher.Instance != null && GamificationControllerHandSwitcher.Instance.rightHandMesh != null) GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(true);
                     mcqGame.GetComponent<QuizManagers>().DisplayQuestion(headingDetails, allOptions[gameCount], questionlist[gameCount], questionImageUrlList[gameCount], currentGameName, allAnswers[gameCount]);
                     mcqGame.SetActive(true);
                     break;
@@ -253,7 +262,7 @@ public class GamificationManager : MonoBehaviour
                     crossbowHandMode.SetActive(false);
                     ballVisualize.SetActive(false);
                     ballVisualizeHandMode.SetActive(false);
-                    GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(true);
+                    if (GamificationControllerHandSwitcher.Instance != null && GamificationControllerHandSwitcher.Instance.rightHandMesh != null) GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(true);
                     FillIt.GetComponent<QuizManagers>().DisplayAllFillInTheBlanks(questionlist, allAnswers, typeOfGame);
                     FillIt.SetActive(true);
                     
@@ -269,7 +278,7 @@ public class GamificationManager : MonoBehaviour
                     crossbowHandMode.SetActive(false);
                     ballVisualize.SetActive(false);
                     ballVisualizeHandMode.SetActive(false);
-                    GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(true);
+                    if (GamificationControllerHandSwitcher.Instance != null && GamificationControllerHandSwitcher.Instance.rightHandMesh != null) GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(true);
                     
                     if (MatchIt != null)
                     {
@@ -327,11 +336,14 @@ public class GamificationManager : MonoBehaviour
             rightcontroller1.GetComponent<SkinnedMeshRenderer>().enabled = true;
         }
             
-        GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(true);
-        GamificationControllerHandSwitcher.Instance.leftHandRaycast.SetActive(false);
-        GamificationControllerHandSwitcher.Instance.rightHandRaycast.SetActive(false);
-        GamificationControllerHandSwitcher.Instance.leftControllerRaycast.SetActive(false);
-        GamificationControllerHandSwitcher.Instance.rightControllerRaycast.SetActive(false);
+        if (GamificationControllerHandSwitcher.Instance != null)
+        {
+            if (GamificationControllerHandSwitcher.Instance.rightHandMesh != null) GamificationControllerHandSwitcher.Instance.rightHandMesh.SetActive(true);
+            if (GamificationControllerHandSwitcher.Instance.leftHandRaycast != null) GamificationControllerHandSwitcher.Instance.leftHandRaycast.SetActive(false);
+            if (GamificationControllerHandSwitcher.Instance.rightHandRaycast != null) GamificationControllerHandSwitcher.Instance.rightHandRaycast.SetActive(false);
+            if (GamificationControllerHandSwitcher.Instance.leftControllerRaycast != null) GamificationControllerHandSwitcher.Instance.leftControllerRaycast.SetActive(false);
+            if (GamificationControllerHandSwitcher.Instance.rightControllerRaycast != null) GamificationControllerHandSwitcher.Instance.rightControllerRaycast.SetActive(false);
+        }
         DeviceSynHandler.isGameOver = true;
         thankyouCanvas.SetActive(true);
         GameManager.Instance.AssessmentParent.SetActive(false);
@@ -342,10 +354,10 @@ public class GamificationManager : MonoBehaviour
             schoolId = schoolId,
             sectionID = sectionID,
             gradeID = gradeID,
-            score = arrowScore + basketBallScore + mcqScore,
+            score = Klass.Net.LiveViewPublisher.Instance != null ? Klass.Net.LiveViewPublisher.Instance.CorrectCount : 0,
             totalQuestions = currentGameName == "MatchingFollowing" ? 5 : allOptions.Count,
-            answeredQuestions = currentGameName == "MatchingFollowing" ? 5 : allOptions.Count,
-            correctAnswers = arrowScore + basketBallScore + mcqScore,
+            answeredQuestions = Klass.Net.LiveViewPublisher.Instance != null ? Klass.Net.LiveViewPublisher.Instance.AnsweredCount : 0,
+            correctAnswers = Klass.Net.LiveViewPublisher.Instance != null ? Klass.Net.LiveViewPublisher.Instance.CorrectCount : 0,
             // optional, defaults to 60
         };
         string jsonData = JsonUtility.ToJson(student);
@@ -406,14 +418,24 @@ public class GamificationManager : MonoBehaviour
     }
     public void   CallingThankYouCanvas()
     {
-        Klass.Net.LiveViewPublisher.Instance?.PublishAssessmentCompleted();
+        PrepareCompletionScreen();
+        StartCoroutine(EnableThankYouCanvas(exid, sid, sectionId, gradeId));
+    }
+
+    public void PrepareCompletionScreen()
+    {
+        Klever.VR.SessionPresentation.ShowCompleted(0, 0);
+
+        Klass.Net.LiveViewPublisher.Instance?.PublishAssessmentCompleted(currentGameName == "MatchingFollowing" ? 5 : allOptions.Count);
         foreach (GameObject item in disableObjects)
         {
-            item.SetActive(false);
+            if (item != null) item.SetActive(false);
         }
-        classRoom.SetActive(true);
+        if (classRoom != null) classRoom.SetActive(true);
+        if (thankyouCanvas != null) thankyouCanvas.SetActive(true);
+        if (GameManager.Instance != null && GameManager.Instance.AssessmentParent != null)
+            GameManager.Instance.AssessmentParent.SetActive(false);
         ActiveDeviceStatus();
-        StartCoroutine(EnableThankYouCanvas(exid, sid, sectionId, gradeId));
     }
     private string exid;
     private string sid;
@@ -476,10 +498,11 @@ public class GamificationManager : MonoBehaviour
     // Method to enable selected games based on data from API
     public void ActiveDeviceStatus()
     {
-        // Migrated from REST PATCH /device_sync to retained MQTT state publish.
-        var mqtt = Klass.Net.KlassMqttClient.Instance;
-        if (mqtt != null && mqtt.IsConnected)
-            mqtt.PublishState(isActive: true, isSynced: true, isCompleted: true);
+        var handler = GameManager.Instance != null ? GameManager.Instance.deviceSynHandler : null;
+        if (handler == null) handler = FindObjectOfType<DeviceSynHandler>();
+        if (handler != null) handler.MarkExperienceCompleted();
+        Klever.VR.SessionPresentation.ShowCompleted(Klass.Net.LiveViewPublisher.Instance != null ? Klass.Net.LiveViewPublisher.Instance.CorrectCount : 0,
+            currentGameName == "MatchingFollowing" ? 5 : allOptions.Count);
     }
     IEnumerator SendPatchRequest(string api, string jsonPayload)
     {

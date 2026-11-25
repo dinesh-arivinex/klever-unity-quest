@@ -25,6 +25,7 @@ public class DeepLinkManager : MonoBehaviour
             return;
         }
 
+        Instance = this;
         DontDestroyOnLoad(gameObject);
         
         Application.deepLinkActivated += onDeepLinkActivated;
@@ -38,9 +39,7 @@ public class DeepLinkManager : MonoBehaviour
 
     private void onDeepLinkActivated(string url)
     {
-        DebugUtil.Log("[DeepLinkManager] Deep link activated: " + url);
-        
-        if (url.Contains("klever://webtest"))
+        if (IsSimulationReturnUrl(url) && PlayerPrefs.GetInt("InSimulation", 0) == 1)
         {
             isResumingFromDeepLink = true;
 
@@ -53,8 +52,28 @@ public class DeepLinkManager : MonoBehaviour
         }
     }
 
+    // Routing validation only: this URL is not proof that an external lab was
+    // completed. The simulation flag must have been set by our launch flow.
+    public static bool IsSimulationReturnUrl(string url)
+    {
+        return Uri.TryCreate(url, UriKind.Absolute, out var uri) &&
+            string.Equals(uri.Scheme, "klever", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(uri.Host, "webtest", StringComparison.OrdinalIgnoreCase) &&
+            string.IsNullOrEmpty(uri.UserInfo) && uri.IsDefaultPort &&
+            (uri.AbsolutePath == "" || uri.AbsolutePath == "/") &&
+            string.IsNullOrEmpty(uri.Fragment);
+    }
+
+    private void OnDestroy()
+    {
+        Application.deepLinkActivated -= onDeepLinkActivated;
+        if (Instance == this) Instance = null;
+    }
+
     public static void ResumeExperience()
     {
+        if (!isResumingFromDeepLink && PlayerPrefs.GetInt("InSimulation", 0) != 1) return;
+        if (GameManager.Instance == null || GameManager.Instance.api == null) return;
         isResumingFromDeepLink = false;
         PlayerPrefs.SetInt("InSimulation", 0);
         PlayerPrefs.Save();

@@ -46,6 +46,8 @@ namespace Klass.Net
 
         // ── Internals ──────────────────────────────────────────────────────
         private MqttClient _client;
+        private LearningEventOutbox learningOutbox;
+        private float nextOutboxSend;
         private MqttCredentialsFetcher.Credentials _creds;
         private readonly ConcurrentQueue<Action> _mainThread = new ConcurrentQueue<Action>();
         private readonly object _lock = new object();
@@ -67,6 +69,12 @@ namespace Klass.Net
 
         void Update()
         {
+            if (IsConnected && learningOutbox != null && Time.realtimeSinceStartup >= nextOutboxSend)
+            {
+                nextOutboxSend = Time.realtimeSinceStartup + 0.5f;
+                try { learningOutbox.SendPending(node => PublishJson(MqttTopics.Telemetry(SchoolId, DeviceId), node, false, 1)); }
+                catch (Exception ex) { Debug.LogWarning("[Telemetry] Pending events retained: " + ex.Message); }
+            }
             // Drain main-thread work queued from MQTT worker thread
             while (_mainThread.TryDequeue(out var act))
             {
@@ -74,6 +82,19 @@ namespace Klass.Net
             }
         }
 
+        // A wear-sensor sleep can leave a half-open TCP connection. Reconnect
+        // and resubscribe on wake to receive the latest retained teacher state.
+        void OnApplicationPause(bool paused)
+        {
+            if (paused || !_wantConnected) return;
+            Debug.Log("[KlassMqtt] Application resumed; reconnecting for retained session state.");
+            if (_reconnectLoop != null) StopCoroutine(_reconnectLoop);
+            if (_refreshLoop != null) { StopCoroutine(_refreshLoop); _refreshLoop = null; }
+            SafeDisconnect();
+            OnDisconnected?.Invoke();
+            _backoff = reconnectInitialSeconds;
+            _reconnectLoop = StartCoroutine(ReconnectLoop());
+        }
         void OnApplicationQuit()
         {
             _wantConnected = false;
@@ -109,6 +130,7 @@ namespace Klass.Net
             if (!string.IsNullOrEmpty(playState))    node["playState"]    = playState;
             if (!string.IsNullOrEmpty(experienceId)) node["experienceId"] = experienceId;
             node["ts"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            AppendSoftware(node);
             PublishJson(MqttTopics.State(SchoolId, DeviceId), node, retain: true, qos: 1);
         }
 
@@ -135,6 +157,7 @@ namespace Klass.Net
             // Explicitly clear any previous downloadError when publishing normal state.
             node["downloadError"] = new JSONNull();
             node["ts"] = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            AppendSoftware(node);
             PublishJson(MqttTopics.State(SchoolId, DeviceId), node, retain: true, qos: 1);
         }
 
@@ -154,15 +177,27 @@ namespace Klass.Net
             node["playState"]        = "idle";
             node["downloadError"]    = string.IsNullOrEmpty(errorMessage) ? "Unknown download error" : errorMessage;
             node["ts"]               = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString();
+            AppendSoftware(node);
             PublishJson(MqttTopics.State(SchoolId, DeviceId), node, retain: true, qos: 1);
+        }
+
+        private static void AppendSoftware(JSONObject node)
+        {
+            var report = Klever.VR.Updates.VrSoftwareStatus.GetIfDue();
+            if (!string.IsNullOrEmpty(report)) node["software"] = JSON.Parse(report);
         }
 
         public void PublishTelemetry(JSONObject node)
         {
-            if (!IsConnected) return;
-            // Learning events must survive transient packet loss. Event IDs make
-            // QoS 1 redelivery safe because the backend stores them idempotently.
-            PublishJson(MqttTopics.Telemetry(SchoolId, DeviceId), node, retain: false, qos: 1);
+            if (node == null || string.IsNullOrEmpty(node["experienceId"].Value)) return;
+            if (string.IsNullOrEmpty(SchoolId) || string.IsNullOrEmpty(DeviceId)) return;
+            try
+            {
+                if (learningOutbox == null) learningOutbox = new LearningEventOutbox(SchoolId, DeviceId);
+                learningOutbox.Add(node);
+            }
+            catch (Exception ex) { Debug.LogError("[Telemetry] Unable to persist event: " + ex.Message); }
+
         }
 
         public void PublishLiveViewState(JSONObject node)
@@ -193,7 +228,7 @@ namespace Klass.Net
             if (!IsConnected) return;
             try
             {
-                var bytes = Encoding.UTF8.GetBytes(body == null ? "{}" : body.ToString());
+                var bytes = Encoding.UTF8.GetBytes(body == null ? "{}" : LearningEventOutbox.Normalize(body).ToString());
                 _client.Publish(topic, bytes, qos, retain);
             }
             catch (Exception ex)
@@ -215,12 +250,12 @@ namespace Klass.Net
                     {
                         var wait = _backoff;
                         _backoff = Mathf.Min(reconnectMaxSeconds, _backoff * 2f);
-                        yield return new WaitForSeconds(wait);
+                        yield return new WaitForSecondsRealtime(wait);
                         continue;
                     }
                     _backoff = reconnectInitialSeconds;
                 }
-                yield return new WaitForSeconds(1f);
+                yield return new WaitForSecondsRealtime(1f);
             }
         }
 
@@ -297,6 +332,8 @@ namespace Klass.Net
                 Debug.LogWarning($"[KlassMqtt] subscribe failed: {ex.Message}");
             }
 
+            learningOutbox = new LearningEventOutbox(SchoolId, DeviceId);
+            nextOutboxSend = 0;
             // 4. Publish online presence (retained)
             try
             {
@@ -322,7 +359,7 @@ namespace Klass.Net
             {
                 var ttl = _creds.ExpiresAt - DateTimeOffset.UtcNow.ToUnixTimeSeconds();
                 var sleep = Mathf.Max(60f, (float)(ttl - 60));
-                yield return new WaitForSeconds(sleep);
+                yield return new WaitForSecondsRealtime(sleep);
                 // Force reconnect with fresh creds (keeps things simple & robust)
                 Debug.Log("[KlassMqtt] credential refresh triggered");
                 _creds = null;
@@ -417,7 +454,17 @@ namespace Klass.Net
 
                     if (topic == MqttTopics.SessionControl(SchoolId))      OnSessionControl?.Invoke(node);
                     else if (topic == MqttTopics.Broadcast(SchoolId))      OnBroadcast?.Invoke(node);
-                    else if (topic == MqttTopics.Cmd(SchoolId, DeviceId))  OnCommand?.Invoke(node);
+                    else if (topic == MqttTopics.Cmd(SchoolId, DeviceId))
+                    {
+                        if (node != null && node["action"].Value == "telemetryAck") learningOutbox?.Acknowledge(node);
+                        else if (node != null && node["action"].Value == "softwareUpdate")
+                        {
+                            var accepted = Klever.VR.Updates.VrUpdateClient.Instance != null &&
+                                Klever.VR.Updates.VrUpdateClient.Instance.RequestFleetUpdate();
+                            PublishCmdAck(node["msgId"].Value, accepted, accepted ? null : "Updates require an idle headset. End the prepared class first.");
+                        }
+                        else OnCommand?.Invoke(node);
+                    }
                 });
             }
             catch (Exception ex)

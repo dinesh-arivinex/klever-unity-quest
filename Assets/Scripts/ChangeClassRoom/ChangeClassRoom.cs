@@ -62,10 +62,14 @@ public class ChangeClassRoom : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
+        Klever.VR.ClassroomBranding.Configure(this);
        
     }
     public void AssignClassRoom(string roomDetails)
     {
+        // The board screens live outside the classroom roots. Hide all old
+        // screens before selecting the new room, avoiding overlapping boards.
+        foreach (var board in new[] { boardA, boardB, boardC }) if (board != null) board.SetActive(false);
         RoomController classRoom1 = new ClassRoomOne();
         RoomController classRoom2 = new ClassRoomOne();
         RoomController classRoom3 = new ClassRoomOne();

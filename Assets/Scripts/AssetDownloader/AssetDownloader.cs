@@ -110,6 +110,7 @@ public class AssetDownloader : MonoBehaviour
     }
     private void Perform()
     {
+        Klass.Net.LiveViewPublisher.Instance?.CompleteContent("model3d");
         webManager.StartSimulation();
       
     }
@@ -165,6 +166,7 @@ public class AssetDownloader : MonoBehaviour
     }
     void CallFunction()
     {
+        Klass.Net.LiveViewPublisher.Instance?.CompleteContent("model3d");
         if (text != null)
             text.text = "";
         int availableModelCount = api != null && api.allUrl != null ? api.allUrl.Count : 0;
@@ -211,12 +213,17 @@ public class AssetDownloader : MonoBehaviour
         return null;
     }
 
+    public void PublishVisibleModel()
+    {
+        string modelUrl = PlayerPrefs.GetString(StaticStrings.modelUrl);
+        var details = new SimpleJSON.JSONObject();
+        details["name"] = PlayerPrefs.GetString(StaticStrings.modelName);
+        Klass.Net.LiveViewPublisher.Instance?.ShowContent("model3d", modelUrl, modelUrl, details);
+    }
     public void ChangeModelPosition()
     {
         GameObject collectionPopint = GameObject.Find("CollectionPointCloneScene");
-        GameObject VrModelParent = collectionPopint.transform.GetChild(0).gameObject;
-        Transform parent = VrModelParent.transform.GetChild(0);
-        Transform child = parent.transform.GetChild(0);
+        if (collectionPopint == null || instantiationPoint == null) return;
 
         // Calculate bottom of the entire model (collection point and its hierarchy)
         Vector3 collectionBottom = GetBottomPosition(collectionPopint);
@@ -230,7 +237,7 @@ public class AssetDownloader : MonoBehaviour
         // Move the entire collectionPopint without changing child structure
         collectionPopint.transform.position -= offset;
 
-        StartCoroutine(ChildZero(child.transform));
+        // No deep-child indexing: glTF assets have different hierarchy depths.
     }
 
     IEnumerator ChildZero(Transform child )

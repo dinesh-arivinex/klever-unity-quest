@@ -96,6 +96,7 @@ public class ThreesixtyImageManager : MonoBehaviour
 
       yield return new WaitForSeconds(addingImage.imageTimer);
        
+        Klass.Net.LiveViewPublisher.Instance?.CompleteContent("image360");
         imge.SetActive(false);
         ToggleElement(true);
         //webmanager.ActivateWebView();

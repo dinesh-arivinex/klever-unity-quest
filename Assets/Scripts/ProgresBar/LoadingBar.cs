@@ -163,6 +163,7 @@ public class LoadingBar : MonoBehaviour
     }
     public void SynchDevice()
     {
+        Klever.VR.SessionPresentation.ShowLoading();
         if (parentObject == null && transform.parent != null)
             parentObject = transform.parent.gameObject;
         if (parentObject != null) parentObject.SetActive(true);

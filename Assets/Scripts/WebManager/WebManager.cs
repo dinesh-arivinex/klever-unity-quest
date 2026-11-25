@@ -107,14 +107,15 @@ public class WebManager : MonoBehaviour
     {
         if (!string.IsNullOrEmpty(url))
         {
+            if (firstTime)
+            {
             var liveDetails = new SimpleJSON.JSONObject();
             liveDetails["isObjectXR"] = isobjectXR;
             liveDetails["durationSeconds"] = simulationTimer;
             Klass.Net.LiveViewPublisher.Instance?.ShowContent("simulation", url, url, liveDetails);
 
 
-            if (firstTime)
-            {
+
                 ChangeSkyBox.SetSkybox(ChangeSkyBox.skyBoxMaterialNew[ChangeClassRoom.Instance.classRoom]);
                 GamificationControllerHandSwitcher.Instance.leftHandRaycast.SetActive(true);
                 GamificationControllerHandSwitcher.Instance.rightHandRaycast.SetActive(true);

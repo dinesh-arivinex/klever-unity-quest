@@ -70,6 +70,7 @@ public class DeviceSynHandler : MonoBehaviour
     private bool isFirstTime;
     private bool isLobby = true;
     private bool _isPaused;
+    private long _lastSessionControlTimestamp;
 
     private bool _mqttBooted;
     private string _lastPublishedFingerprint;
@@ -143,6 +144,12 @@ public class DeviceSynHandler : MonoBehaviour
 
     private void HandleSessionControl(JSONNode payload)
     {
+        if (payload != null && long.TryParse(payload["ts"].Value, out var commandTimestamp) && commandTimestamp > 0)
+        {
+            if (commandTimestamp < _lastSessionControlTimestamp) return;
+            _lastSessionControlTimestamp = commandTimestamp;
+        }
+        if (Klever.VR.Updates.VrUpdateClient.DeferSessionControl(() => HandleSessionControl(payload))) return;
         if (payload == null || payload.Count == 0)
         {
             if (!isLobby) LoadScene();
@@ -177,9 +184,12 @@ public class DeviceSynHandler : MonoBehaviour
         isStartButtonPressed = isStart;
         if (isStart && !isOpenGame)
         {
+            Screen.sleepTimeout = SleepTimeout.NeverSleep;
             isOpening = true;
             isLobby = false;
             isOpenGame = true;
+            isGameOver = false;
+            isCompletedDevice = false;
             isSync = false;
             _downloadProgress = 0;
             _isPaused = false;
@@ -217,25 +227,24 @@ public class DeviceSynHandler : MonoBehaviour
 
         // Handle play / pause for a running session.
         bool isPaused = payload["isPaused"].AsBool;
-        Klass.Net.LiveViewPublisher.Instance?.TrackSessionState(isStart, isPaused, isStop);
         if (isStart && isOpenGame)
         {
             if (isPaused && !_isPaused)
             {
+                PauseVR();
                 _isPaused = true;
                 _lastPublishedFingerprint = string.Empty; // force heartbeat republish
                 PublishStateIfChanged(force: true);
-                PauseVR();
             }
             else if (!isPaused && _isPaused)
             {
+                ResumeVR();
                 _isPaused = false;
                 _lastPublishedFingerprint = string.Empty;
                 PublishStateIfChanged(force: true);
-                ResumeVR();
             }
         }
-
+        Klass.Net.LiveViewPublisher.Instance?.TrackSessionState(isStart, _isPaused, isStop);
     }
 
     private void HandleCommand(JSONNode cmd)
@@ -257,66 +266,14 @@ public class DeviceSynHandler : MonoBehaviour
 
     public GameObject[] RayInteractors;
 
-    private void PauseVR()
+    private LessonPause lessonPause;
+    private void PauseVR() => SetLessonPaused(true);
+    private void ResumeVR() => SetLessonPaused(false);
+    private void SetLessonPaused(bool paused)
     {
-        Time.timeScale = 0f;
-        AudioListener.pause = true;
-        
-        foreach(var item in RayInteractors)
-        {
-            item.SetActive(false);
-        }
-
-        if (VideoManager.Instance != null)
-        {
-            if (VideoManager.Instance.mediaPlayer != null && VideoManager.Instance.mediaPlayer.Control != null)
-            {
-                if (VideoManager.Instance.mediaPlayer.Control.IsPlaying())
-                {
-                    VideoManager.Instance.mediaPlayer.Control.Pause();
-                }
-            }
-
-            if (VideoManager.Instance.youtubePlayer != null)
-            {
-                var vp = VideoManager.Instance.youtubePlayer.GetComponent<UnityEngine.Video.VideoPlayer>();
-                if (vp != null && vp.isPlaying)
-                {
-                    vp.Pause();
-                }
-            }
-        }
-    }
-
-    private void ResumeVR()
-    {
-        Time.timeScale = 1f;
-        AudioListener.pause = false;
-
-        foreach (var item in RayInteractors)
-        {
-            item.SetActive(true);
-        }
-
-        if (VideoManager.Instance != null)
-        {
-            if (VideoManager.Instance.mediaPlayer != null && VideoManager.Instance.mediaPlayer.Control != null)
-            {
-                if (VideoManager.Instance.mediaPlayer.Control.IsPaused())
-                {
-                    VideoManager.Instance.mediaPlayer.Control.Play();
-                }
-            }
-
-            if (VideoManager.Instance.youtubePlayer != null)
-            {
-                var vp = VideoManager.Instance.youtubePlayer.GetComponent<UnityEngine.Video.VideoPlayer>();
-                if (vp != null && vp.isPaused)
-                {
-                    vp.Play();
-                }
-            }
-        }
+        if (lessonPause == null) lessonPause = gameObject.AddComponent<LessonPause>();
+        lessonPause.Apply(paused, RayInteractors);
+        Debug.Log("[LESSON-PAUSE] Applied paused=" + paused);
     }
     public void SynDevice()
     {
@@ -324,9 +281,9 @@ public class DeviceSynHandler : MonoBehaviour
         isStartGame = true;
         isSyncedDevice = true;
         PublishStateIfChanged(force: true);
-        // Ensure timeScale and audio are reset when returning to lobby
-        Time.timeScale = 1f;
-        AudioListener.pause = false;
+        // A pause received during download must survive download completion.
+        if (_isPaused) PauseVR();
+        else { Time.timeScale = 1f; AudioListener.pause = false; }
         if (isStartButtonPressed) TriggerWelcomeIfReady();
     }
 
@@ -337,6 +294,8 @@ public class DeviceSynHandler : MonoBehaviour
 
     public void LoadScene()
     {
+        Screen.sleepTimeout = SleepTimeout.SystemSetting;
+        Klever.VR.SessionPresentation.ShowWaiting();
         Time.timeScale = 1f;
         AudioListener.pause = false;
         _isPaused = false;
@@ -367,6 +326,19 @@ public class DeviceSynHandler : MonoBehaviour
             apiManager.CallingClassVrExperiance();
     }
 
+    public string CurrentPlayState => isGameOver ? "completed" : _isPaused ? "paused" :
+        isSync ? "playing" : !isLobby && isOpening ? "downloading" : "idle";
+
+    public void MarkExperienceCompleted()
+    {
+        Screen.sleepTimeout = SleepTimeout.NeverSleep;
+        isGameOver = true;
+        isCompletedDevice = true;
+        isOpening = false;
+        _isPaused = false;
+        PublishStateIfChanged(force: true);
+    }
+
     private void PublishStateIfChanged(bool force)
     {
         var mqtt = KlassMqttClient.Instance;
@@ -376,12 +348,7 @@ public class DeviceSynHandler : MonoBehaviour
         bool synced    = isSync;
         bool completed = isGameOver;
         int progress   = synced ? 100 : Mathf.Clamp(_downloadProgress, 0, 100);
-        string playState;
-        if (completed)          playState = "completed";
-        else if (_isPaused)     playState = "paused";
-        else if (synced)        playState = "playing";
-        else if (!isLobby && isOpening) playState = "downloading";
-        else                    playState = "idle";
+        string playState = CurrentPlayState;
 
         // Include pause + progress in the fingerprint so any change triggers a publish.
         var fp = $"{active}|{synced}|{completed}|{progress}|{playState}|{_isPaused}|{_handRaised}|{experienceId}";

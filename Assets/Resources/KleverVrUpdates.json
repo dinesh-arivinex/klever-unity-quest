@@ -1,0 +1,17 @@
+{
+  "enabled": true,
+  "autoDownload": true,
+  "endpoint": "https://api.klever-edu.com/vr-releases/check",
+  "channel": "uat",
+  "allowedHosts": [
+    "api.klever-edu.com",
+    "klever-edu.com"
+  ],
+  "keys": [
+    {
+      "keyId": "dpvr-uat-20261110",
+      "modulus": "1Wk0Z+4PN4tlWEyEGuYMebmGsmUqDcVIDtG2v6JMEhmsgRqufs3oke4vSmivRaYJ4pkQbC0pYLNMDobKlSrpZMPrvFNYovTWYVNXQaiOBp4PxQdfJsGpADrDnhaA/apJedARSLmBWDLuHOdZDmnn5bRokF5bQMk6he7MhwFHCyCJuaGMmXlIf1dnTEaqg4+fPy0BtxqsIfFTVtM8OT0cEmwUcHCzfdFJ5cj8CXkLAD+6KuWOQq6RDK4AUkcZnOrGVw7X9DqvF0nYD51koZAjGCxcomVpdOc21rq2lXxN9useWRjR9i30NMz/Zg2rJ0aIk2jcYUl9rvfhLbk48yr4bQM5idvUDMIgTUaabmdDwEi76HxSPF8lnFrJY/iOePYWbX6dhBUpBZV+Z7EeJe5AiHIbNXQqKTOS5DljadSsLuj0KATjqahzsRn6FFmFrnKL2b1ZPhLeNPXN4gGrmCPgXXYqe/95nKCCqgQpXSv6cUUOsdauPl3zDZlfnCwEUc6v",
+      "exponent": "AQAB"
+    }
+  ]
+}
