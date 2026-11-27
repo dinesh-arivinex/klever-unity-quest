@@ -15,7 +15,7 @@ public class ColliderTriggerMatch : MonoBehaviour
 
     private void Start()
     {
-        quizManager = FindAnyObjectByType<QuizManagers>();
+        quizManager = GetComponentInParent<QuizManagers>(true) ?? FindAnyObjectByType<QuizManagers>();
 
         // Store the actual Vector3 positions, NOT the transform references!
         if (Answer1Pos != null) pos1 = Answer1Pos.transform.position;
@@ -27,6 +27,8 @@ public class ColliderTriggerMatch : MonoBehaviour
 
     private void OnTriggerEnter(Collider other)
     {
+        if (LessonPause.IsPaused || (quizManager != null && quizManager.IsMatchSubmitted)) return;
+
         // Check if the collision is between two answers
         if (IsAnswer(gameObject) && IsAnswer(other.gameObject))
         {

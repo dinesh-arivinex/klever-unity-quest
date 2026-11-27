@@ -1,273 +1,288 @@
-using System.Collections;
-using System.Collections.Generic;
 using System;
+using System.Collections;
 using System.Threading.Tasks;
 using TMPro;
-using Unity.VisualScripting;
 using UnityEngine;
 using UnityEngine.Events;
 using Vuplex.WebView;
 using static ChangeClassRoom;
-using static UnityEngine.Rendering.DebugUI;
 
 public class WebManager : MonoBehaviour
 {
-    private const string ObjectXLauncherUrl = "https://klever-edu.com/objectx-launcher.html";
-    private const string AnubhavLauncherUrl = "/admin.html";
-    private GamificationManager gamificationManager;
+    private const float LoadTimeout = 90f;
+    private const string PageReadyCheck =
+        "(function(){var ready=document.documentElement.getAttribute('data-klever-ready');" +
+        "if(document.readyState!=='complete')return false;" +
+        "if(ready!==null)return ready==='true';" +
+        "if(location.href==='about:blank')return false;" +
+        "if(window.AdobeAn&&window.createjs&&document.querySelector('canvas'))" +
+        "return !!(window.stage&&window.stage.getNumChildren&&window.stage.getNumChildren()>0);" +
+        "return true;})()";
     public GameObject webView;
     public GameObject[] disableitems;
     public CanvasWebViewPrefab _webViewPrefab;
-    private string url;
-    private float simulationTimer;
-    private ServiceScript service;
-    public CanvasWebViewLoader canvasWebViewLoader;
-    private string simulationScript;
-    private GoogleTextToSpeech googleTextToSpeech;
     public TextMeshProUGUI timer;
-    private Coroutine timerCoroutine;
     public GameObject buttonNext;
-    private bool oneMinutePassed;
     public UnityEvent startingevent;
     public UnityEvent endevent;
     public GameObject simulation;
     public GameObject temp;
-    private bool firstTime;
     public bool isobjectXR;
-    // Start is called before the first frame update
-    void Start()
-    {
-        googleTextToSpeech = GameManager.Instance.googleTextToSpeech;
-        service = GameManager.Instance.serviceScript;
-        gamificationManager = GameManager.Instance.gamificationManager;
 
+    private string url;
+    private string simulationScript;
+    private float simulationTimer;
+    private Coroutine simulationRoutine;
+    private IWebView embeddedPage;
+    private bool stageEntered;
+    private bool stageEnded;
+    private bool contentShown;
+    private bool applicationPaused;
 
-    }
     public float ConvertTimeToSeconds(string displayTime)
     {
-        if (string.IsNullOrEmpty(displayTime))
-        {
-            Debug.LogError("Input time string is null or empty.");
+        var parts = displayTime?.Split(':');
+        if (parts == null || parts.Length != 2 || !int.TryParse(parts[0], out int minutes) ||
+            !int.TryParse(parts[1], out int seconds) || minutes < 0 || seconds < 0 || seconds >= 60)
             return 0f;
-        }
-
-        // Split the time string into minutes and seconds
-        string[] timeComponents = displayTime.Split(':');
-
-        // Check if the time string has the correct format
-        if (timeComponents.Length != 2)
-        {
-            Debug.LogError("Invalid time format. Expected format is MM:ss.");
-            return 0f;
-        }
-
-        // Parse minutes and seconds from the split string
-        if (!int.TryParse(timeComponents[0], out int minutes) || !int.TryParse(timeComponents[1], out int seconds))
-        {
-            Debug.LogError("Failed to parse minutes or seconds.");
-            return 0f;
-        }
-
-        // Calculate total seconds
-        float totalSeconds = minutes * 60f + seconds;
-
-        return totalSeconds;
-    }
-    public void StopWebViewAudio()
-    {
-        if (_webViewPrefab != null && _webViewPrefab.WebView != null && _webViewPrefab.WebView.IsInitialized)
-        {
-            // Execute JavaScript to stop audio playback within the WebView
-            string jsCommand = "var audioElements = document.getElementsByTagName('audio');" +
-                               "for(var i = 0; i < audioElements.length; i++) {" +
-                               "  audioElements[i].pause();" +
-                               "}";
-
-            _webViewPrefab.WebView.ExecuteJavaScript(jsCommand);
-        }
+        return minutes * 60f + seconds;
     }
 
     public void AssignSimulationAsync(string time, string newUrl, string script)
     {
         simulationScript = script;
-        url = newUrl;
+        url = newUrl?.Trim();
         simulationTimer = ConvertTimeToSeconds(time);
-
-        // ObjectX launches an immersive WebXR session, which Vuplex 3D WebView
-        // doesn't support. Keep the WebView path only for non-WebXR simulations.
-        if (_webViewPrefab != null && !isobjectXR)
-        {
-            _webViewPrefab.InitialUrl = url;
-            StartLoading();
-        }
-
-        StartSimulation();
     }
+
     public void StartSimulation()
     {
-        if (!string.IsNullOrEmpty(url))
-        {
-            if (firstTime)
-            {
-            var liveDetails = new SimpleJSON.JSONObject();
-            liveDetails["isObjectXR"] = isobjectXR;
-            liveDetails["durationSeconds"] = simulationTimer;
-            Klass.Net.LiveViewPublisher.Instance?.ShowContent("simulation", url, url, liveDetails);
-
-
-
-                ChangeSkyBox.SetSkybox(ChangeSkyBox.skyBoxMaterialNew[ChangeClassRoom.Instance.classRoom]);
-                GamificationControllerHandSwitcher.Instance.leftHandRaycast.SetActive(true);
-                GamificationControllerHandSwitcher.Instance.rightHandRaycast.SetActive(true);
-                GamificationControllerHandSwitcher.Instance.leftControllerRaycast.SetActive(true);
-                GamificationControllerHandSwitcher.Instance.rightControllerRaycast.SetActive(true);
-
-                simulation.transform.position = temp.transform.position;
-                simulation.transform.rotation = temp.transform.rotation;
-                startingevent.Invoke();
-                timerCoroutine = StartCoroutine(WebViewDuration(simulationTimer));
-                ToggleItem(false);
-                googleTextToSpeech.StopAudio();
-                if (!string.IsNullOrEmpty(simulationScript))
-                {
-                    googleTextToSpeech.StartTalking(simulationScript);
-                }
-                if (isobjectXR)
-                {
-                    PlayerPrefs.SetInt("InSimulation", 1);
-                    PlayerPrefs.Save();
-                    webView.SetActive(false);
-                    if (url.Contains("vredumelzo"))
-                    {
-                        Application.OpenURL(BuildAnubhavBrowserUrl(url));
-                        StartCoroutine(KleverAppQuit());
-
-                    }
-                    else
-                    {
-                        Application.OpenURL(BuildObjectXBrowserUrl(url));
-                        StartCoroutine(KleverAppQuit());
-
-                    }
-
-                }
-                else
-                {
-                    canvasWebViewLoader.SetupWebView(url);
-                }
-            }
-            else
-            {
-                ChangeSkyBox.SetSkybox(ChangeSkyBox.skyBoxMaterialNew[ChangeClassRoom.Instance.classRoom]);
-                if (isobjectXR)
-                {
-                    // AssignSimulationAsync() preloads normal simulations. ObjectX
-                    // must wait until StartSimulation() is called for the real step,
-                    // then it is opened by the Quest browser above.
-                    webView.SetActive(false);
-                }
-                else
-                {
-                    webView.SetActive(true);
-                    canvasWebViewLoader.SetupWebView(url);
-                }
-            }
-            firstTime = true;
-
-        }
-        else
+        if (stageEntered || stageEnded) return;
+        stageEntered = true;
+        if (string.IsNullOrEmpty(url))
         {
             CheckTheStatus();
+            return;
         }
 
-    }
-
-    private string BuildObjectXBrowserUrl(string embedUrl)
-    {
-        //return ObjectXLauncherUrl + "?src=" + Uri.EscapeDataString(embedUrl);
-        return embedUrl;
-    }
-
-    private string BuildAnubhavBrowserUrl(string embedUrl)
-    {
-        return embedUrl;
-    }
-
-    public void ToggleItem(bool value)
-    {
-
-        foreach (GameObject item in disableitems)
+        var room = ChangeClassRoom.Instance;
+        if (room != null) ChangeSkyBox.SetSkybox(ChangeSkyBox.skyBoxMaterialNew[room.classRoom]);
+        var hands = GamificationControllerHandSwitcher.Instance;
+        if (hands != null)
         {
-            item.SetActive(value);
+            hands.leftHandRaycast?.SetActive(true);
+            hands.rightHandRaycast?.SetActive(true);
+            hands.leftControllerRaycast?.SetActive(true);
+            hands.rightControllerRaycast?.SetActive(true);
+        }
+        if (simulation != null && temp != null)
+            simulation.transform.SetPositionAndRotation(temp.transform.position, temp.transform.rotation);
+
+        startingevent.Invoke();
+        ToggleItem(false);
+        GameManager.Instance.googleTextToSpeech?.StopAudio();
+        buttonNext.SetActive(false);
+        if (isobjectXR)
+        {
+            BeginContent();
+            OpenExternalSimulation();
+            return;
         }
 
-
-
+        timer.text = "Loading simulation…";
+        PrepareEmbeddedView();
+        simulationRoutine = StartCoroutine(RunEmbeddedSimulation());
     }
 
-    private async void StartLoading()
+    public void PrepareEmbeddedView()
     {
-        if (_webViewPrefab != null)
+        // Quest uses the scene-authored floating canvas and Oculus controls.
+        // Board fitting and replacement pointer controls belong to the DPVR renderer.
+        if (simulation != null && temp != null)
+            simulation.transform.SetPositionAndRotation(temp.transform.position, temp.transform.rotation);
+        webView.SetActive(true);
+        _webViewPrefab.gameObject.SetActive(true);
+        _webViewPrefab.Visible = true;
+    }
+
+    private IEnumerator RunEmbeddedSimulation()
+    {
+        // Initialization and navigation have separate limits. Neither consumes
+        // the authored activity duration.
+        float deadline = Time.realtimeSinceStartup + LoadTimeout;
+        var init = _webViewPrefab.WaitUntilInitialized();
+        while (!init.IsCompleted && Time.realtimeSinceStartup < deadline) yield return null;
+        if (init.Status != TaskStatus.RanToCompletion || _webViewPrefab.WebView == null)
         {
-            await _webViewPrefab.WaitUntilInitialized();
-            _webViewPrefab.WebView.UrlChanged += (sender, eventArgs) => {
-                Debug.Log("[WebManager] URL changed: " + eventArgs.Url);
-                if (!string.IsNullOrEmpty(eventArgs.Url) && (eventArgs.Url.Contains("klever://") || eventArgs.Url.Contains("klever-edu") || eventArgs.Url.EndsWith("/home") || eventArgs.Url.Contains("close-simulation")))
-                {
-                    Debug.Log("[WebManager] Deep link / Home redirect detected: " + eventArgs.Url + ". Closing simulation.");
-                    CheckTheStatus();
-                }
-            };
-            _webViewPrefab.WebView.LoadUrl(url);
+            yield return FinishUnavailableSimulation();
+            yield break;
         }
+
+        embeddedPage = _webViewPrefab.WebView;
+        embeddedPage.UrlChanged += OnSimulationUrlChanged;
+        bool ready = false;
+        yield return WaitForPlayablePage(value => ready = value);
+        if (!ready)
+        {
+            yield return FinishUnavailableSimulation();
+            yield break;
+        }
+
+        // Unity can initialize the web view while the application is paused.
+        // Start tracking only once the learner can see and use the board.
+        yield return new WaitUntil(() => !applicationPaused && !LessonPause.IsPaused);
+        BeginContent();
+        Debug.Log("[SIMULATION] Quest WebView ready; authored duration started.");
+        if (simulationTimer <= 0f)
+        {
+            timer.text = string.Empty;
+            buttonNext.SetActive(true);
+            yield break;
+        }
+        yield return WebViewDuration(simulationTimer);
     }
 
-    IEnumerator WebViewDuration(float duration)
+    private IEnumerator WaitForPlayablePage(Action<bool> complete)
     {
-
-        float timeRemaining = duration;
-        while (timeRemaining > 0)
+        var deadline = Time.realtimeSinceStartup + LoadTimeout;
+        Task pageLoad;
+        try
         {
-            // Calculate minutes and seconds
-            int minutes = Mathf.FloorToInt(timeRemaining / 60);
-            int seconds = Mathf.FloorToInt(timeRemaining % 60);
+            pageLoad = embeddedPage.WaitForNextPageLoadToFinish();
+            embeddedPage.LoadUrl(url);
+        }
+        catch (Exception error)
+        {
+            Debug.LogWarning("[Simulation] Navigation failed: " + error.GetType().Name);
+            complete(false);
+            yield break;
+        }
 
-            // Update the timer text to display in minutes and seconds format
-            timer.text = string.Format("{0}:{1:00}", minutes, seconds);
-
-            // aterter reach one min
-            if (timeRemaining <= duration - 60f && !oneMinutePassed)
+        while (!pageLoad.IsCompleted && Time.realtimeSinceStartup < deadline) yield return null;
+        if (pageLoad.Status == TaskStatus.RanToCompletion)
+        {
+            while (Time.realtimeSinceStartup < deadline)
             {
-                oneMinutePassed = true;
-                buttonNext.SetActive(true);
+                var check = embeddedPage.ExecuteJavaScript(PageReadyCheck);
+                while (!check.IsCompleted && Time.realtimeSinceStartup < deadline) yield return null;
+                if (check.Status == TaskStatus.RanToCompletion &&
+                    string.Equals(check.Result?.Trim('"'), "true", StringComparison.OrdinalIgnoreCase))
+                {
+                    complete(true);
+                    yield break;
+                }
+                yield return new WaitForSecondsRealtime(0.5f);
             }
-
-            yield return new WaitForSeconds(1f); // Wait for 1 second
-            timeRemaining -= 1f; // Decrease remaining time by 1 second
         }
+        else if (pageLoad.IsFaulted)
+        {
+            Debug.LogWarning("[Simulation] Page load failed: " + pageLoad.Exception.GetBaseException().GetType().Name);
+        }
+        complete(false);
+    }
 
-        // After the countdown is complete, check the status
+    private void BeginContent()
+    {
+        var details = new SimpleJSON.JSONObject();
+        details["isObjectXR"] = isobjectXR;
+        details["durationSeconds"] = simulationTimer;
+        Klass.Net.LiveViewPublisher.Instance?.ShowContent("simulation", url, url, details);
+        contentShown = true;
+        if (!string.IsNullOrEmpty(simulationScript))
+            GameManager.Instance.googleTextToSpeech?.StartTalking(simulationScript);
+    }
+
+    private IEnumerator FinishUnavailableSimulation()
+    {
+        timer.text = "Simulation unavailable. Continuing shortly…";
+        GameManager.Instance.deviceSynHandler?.PublishDownloadError("Simulation did not finish loading.");
+        yield return new WaitForSeconds(4f);
+        FinishStage(false);
+    }
+
+    private IEnumerator WebViewDuration(float duration)
+    {
+        float elapsed = 0f;
+        int displayed = -1;
+        while (elapsed < duration)
+        {
+            int seconds = Mathf.CeilToInt(duration - elapsed);
+            if (seconds != displayed)
+            {
+                displayed = seconds;
+                timer.text = $"{seconds / 60}:{seconds % 60:00}";
+            }
+            if (elapsed >= 60f && !buttonNext.activeSelf) buttonNext.SetActive(true);
+            yield return null;
+            if (!applicationPaused && !LessonPause.IsPaused) elapsed += Time.deltaTime;
+        }
         CheckTheStatus();
     }
-    public void CheckTheStatus()
 
+    private void OpenExternalSimulation()
     {
-        Klass.Net.LiveViewPublisher.Instance?.HideContent("simulation-completed");
-        //PlayerPrefs.SetInt("InSimulation", 0);
+        PlayerPrefs.SetInt("InSimulation", 1);
         PlayerPrefs.Save();
-
-        endevent.Invoke();
-        if (timerCoroutine != null)
-        {
-            StopCoroutine(timerCoroutine);
-        }
-        StopWebViewAudio();
-        // webView.SetActive(false );
-        Destroy(webView);
-        service.AssignTaskBasedOnCondition(GameStatus.Mcq);
-        gamificationManager.AssignGames();
+        webView.SetActive(false);
+        timer.text = "Return to Klever when you finish";
+        Application.OpenURL(url);
+        StartCoroutine(KleverAppQuit());
     }
-    // Update is called once per frame
+
+    private void OnSimulationUrlChanged(object sender, UrlChangedEventArgs args)
+    {
+        if (DeepLinkManager.IsSimulationReturnUrl(args.Url)) CheckTheStatus();
+        else if (Uri.TryCreate(args.Url, UriKind.Absolute, out var destination) &&
+                 Uri.TryCreate(url, UriKind.Absolute, out var origin) &&
+                 string.Equals(destination.Host, origin.Host, StringComparison.OrdinalIgnoreCase) &&
+                 destination.AbsolutePath == "/close-simulation")
+            CheckTheStatus();
+    }
+
+    public void ToggleItem(bool visible)
+    {
+        foreach (var item in disableitems)
+            if (item != null) item.SetActive(visible);
+    }
+
+    public void StopWebViewAudio()
+    {
+        if (embeddedPage != null && embeddedPage.IsInitialized)
+            embeddedPage.ExecuteJavaScript(
+                "Array.prototype.forEach.call(document.querySelectorAll('audio,video'),function(media){media.pause();});", null);
+    }
+
+    public void CheckTheStatus() => FinishStage(true);
+
+    private void FinishStage(bool completed)
+    {
+        if (stageEnded) return;
+        stageEnded = true;
+        if (simulationRoutine != null)
+        {
+            StopCoroutine(simulationRoutine);
+            simulationRoutine = null;
+        }
+        if (contentShown)
+            Klass.Net.LiveViewPublisher.Instance?.HideContent(completed ? "simulation-completed" : "simulation-unavailable");
+        StopWebViewAudio();
+        Unsubscribe();
+        if (webView != null) Destroy(webView);
+        endevent.Invoke();
+        GameManager.Instance.serviceScript.AssignTaskBasedOnCondition(GameStatus.Mcq);
+        GameManager.Instance.gamificationManager.AssignGames();
+    }
+
+    private void OnApplicationPause(bool paused) => applicationPaused = paused;
+
+    private void OnDestroy() => Unsubscribe();
+
+    private void Unsubscribe()
+    {
+        if (embeddedPage == null) return;
+        embeddedPage.UrlChanged -= OnSimulationUrlChanged;
+        embeddedPage = null;
+    }
 
     public IEnumerator KleverAppQuit()
     {

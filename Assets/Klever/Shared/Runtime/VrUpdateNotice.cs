@@ -18,6 +18,9 @@ namespace Klever.VR.Updates
         private Material overlay;
         private readonly List<Material> textMaterials = new List<Material>();
         private TextMeshProUGUI busyMark;
+        private RectTransform progressFill;
+        private GameObject progressTrack;
+        private float outsideViewSince = -1f;
         private int autoInstallerAttempt;
         private void Awake()
         {
@@ -30,7 +33,19 @@ namespace Klever.VR.Updates
             var image = surface.GetComponent<Image>(); image.color = new Color(0.025f, 0.055f, 0.08f, 0.98f); image.material = overlay; image.raycastTarget = true;
             heading = Label(surface.transform, "Update title", new Vector2(0, 135), new Vector2(920, 70), 42);
             detail = Label(surface.transform, "Update detail", new Vector2(0, 30), new Vector2(920, 130), 32);
-            busyMark = Label(surface.transform, "Update progress indicator", new Vector2(0, -53), new Vector2(260, 40), 27);
+            var track = new GameObject("Update download progress", typeof(RectTransform), typeof(Image));
+            track.layer = 5; track.transform.SetParent(rect, false);
+            var trackRect = (RectTransform)track.transform;
+            trackRect.sizeDelta = new Vector2(920, 12); trackRect.anchoredPosition = new Vector2(0, -53);
+            var trackImage = track.GetComponent<Image>(); trackImage.color = new Color(0.16f, 0.23f, 0.27f); trackImage.material = overlay; trackImage.raycastTarget = false;
+            var fill = new GameObject("Downloaded portion", typeof(RectTransform), typeof(Image));
+            fill.layer = 5; fill.transform.SetParent(trackRect, false);
+            progressFill = (RectTransform)fill.transform;
+            progressFill.anchorMin = progressFill.anchorMax = progressFill.pivot = new Vector2(0, 0.5f);
+            progressFill.sizeDelta = new Vector2(0, 12);
+            var fillImage = fill.GetComponent<Image>(); fillImage.color = new Color(0.17f, 0.85f, 0.62f); fillImage.material = overlay; fillImage.raycastTarget = false;
+            progressTrack = track;
+            busyMark = Label(surface.transform, "Update progress indicator", new Vector2(0, -76), new Vector2(400, 22), 20);
             busyMark.color = new Color(0.17f, 0.85f, 0.62f);
             primary = MakeButton(surface.transform, "Update action", new Vector2(-190, -125), new Color(0.17f, 0.85f, 0.62f), out actionText);
             actionText.color = new Color(0.025f, 0.09f, 0.07f);
@@ -159,14 +174,31 @@ namespace Klever.VR.Updates
             else if (client.State == VrUpdateClient.UpdateState.Unavailable) client.RetryCheck();
             else client.RequestInstall();
         }
+        public static bool ShouldDisplay(VrUpdateClient.UpdateState state, int version, int dismissed, bool idle)
+        {
+            if (!idle || version <= 0) return false;
+            switch (state)
+            {
+                case VrUpdateClient.UpdateState.Available:
+                case VrUpdateClient.UpdateState.Unavailable:
+                    return version != dismissed;
+                case VrUpdateClient.UpdateState.Downloading:
+                case VrUpdateClient.UpdateState.Verifying:
+                case VrUpdateClient.UpdateState.VerifiedAwaitingInstaller:
+                case VrUpdateClient.UpdateState.PermissionRequired:
+                case VrUpdateClient.UpdateState.Installing:
+                case VrUpdateClient.UpdateState.AwaitingAndroid:
+                    return true;
+                default:
+                    return false;
+            }
+        }
         private void LateUpdate()
         {
             var client = VrUpdateClient.Instance;
-            if (client == null || client.Release == null || !VrUpdateClient.SafeToDownload() || dismissedVersion == client.Release.VersionCode) { panel.gameObject.SetActive(false); return; }
+            if (client == null || client.Release == null || !ShouldDisplay(client.State, client.Release.VersionCode, dismissedVersion, VrUpdateClient.SafeToDownload()))
+            { panel.gameObject.SetActive(false); outsideViewSince = -1f; return; }
             var state = client.State;
-            bool visible = state == VrUpdateClient.UpdateState.Available || state == VrUpdateClient.UpdateState.Downloading || state == VrUpdateClient.UpdateState.Verifying ||
-                state == VrUpdateClient.UpdateState.VerifiedAwaitingInstaller || state == VrUpdateClient.UpdateState.PermissionRequired || state == VrUpdateClient.UpdateState.Unavailable || client.InstallationActive;
-            if (!visible) { panel.gameObject.SetActive(false); return; }
             var currentEye = Camera.main;
             if (currentEye == null) { panel.gameObject.SetActive(false); return; }
             if (!panel.gameObject.activeSelf || eye != currentEye)
@@ -179,17 +211,27 @@ namespace Klever.VR.Updates
 #endif
             }
             panel.worldCamera = eye;
+            // Keep the panel fixed while it is visible, but recover it after the
+            // learner turns away instead of leaving progress behind their head.
+            var screen = eye.WorldToViewportPoint(panel.transform.position);
+            bool inView = screen.z > 0 && screen.x > 0.08f && screen.x < 0.92f && screen.y > 0.08f && screen.y < 0.92f;
+            if (inView) outsideViewSince = -1f;
+            else if (outsideViewSince < 0f) outsideViewSince = Time.unscaledTime;
+            else if (Time.unscaledTime - outsideViewSince >= 3f) { PlaceInFront(); outsideViewSince = -1f; }
             heading.text = "Klever update · " + client.Release.VersionName;
             bool busy = state == VrUpdateClient.UpdateState.Downloading ||
                         state == VrUpdateClient.UpdateState.Verifying || client.InstallationActive;
             busyMark.gameObject.SetActive(busy);
+            progressTrack.SetActive(state == VrUpdateClient.UpdateState.Downloading || state == VrUpdateClient.UpdateState.Verifying);
+            progressFill.SetSizeWithCurrentAnchors(RectTransform.Axis.Horizontal, 920f *
+                (state == VrUpdateClient.UpdateState.Verifying ? 1f : Mathf.Clamp01(client.DownloadProgress)));
             if (busy)
             {
                 int phase = Mathf.FloorToInt(Time.unscaledTime * 4f) % 3;
                 busyMark.text = "Klever " + new string('·', phase + 1);
             }
             primary.interactable = false;
-            later.interactable = !client.InstallationActive;
+            later.interactable = state == VrUpdateClient.UpdateState.Available || state == VrUpdateClient.UpdateState.Unavailable;
             actionText.text = "Please wait";
             if (state == VrUpdateClient.UpdateState.Available) { detail.text = "A new app update is available. Your lessons and saved results will be kept."; actionText.text = "Download update"; primary.interactable = true; }
             else if (state == VrUpdateClient.UpdateState.Downloading)

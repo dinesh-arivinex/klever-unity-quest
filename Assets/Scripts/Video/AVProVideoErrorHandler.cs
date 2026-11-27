@@ -1,4 +1,4 @@
-﻿// AVProVideoErrorHandler.cs
+// AVProVideoErrorHandler.cs
 using UnityEngine;
 using RenderHeads.Media.AVProVideo;
 using UnityEngine.Video;
@@ -34,18 +34,10 @@ public class AVProVideoErrorHandler : MonoBehaviour
 
     public void HandleVideoError(string errorMessage, MediaPlayer player)
     {
-        // **YOUR CUSTOM LOGIC GOES HERE**
-        Debug.LogError($"🚨 AVPro Video Error Caught [External Script]: Player: {player.name}, Message: {errorMessage}");
-        //VideoManager.Instance.avpro.SetActive(false);
-        //VideoManager.ChangeSkyBox.SetSkybox(VideoManager.Instance.skyBox_VideoPlaye_Mat);
-        //VideoManager.Instance.videoPlayer.gameObject.SetActive(true);
-        //VideoManager.Instance.videoPlayer.source = VideoSource.Url;
-        //VideoManager.Instance.videoPlayer.url = VideoManager.Instance.videoPlayerURL;
-        //VideoManager.Instance.videoPlayer.Play();
-        VideoManager.Instance.googleTextToSpeech.StopAudio();
-        VideoManager.Instance.Performe();
-        // Example custom action: automatically attempt to close the media
-        player.CloseMedia();
+        Debug.LogError($"[Video] {player.name}: {errorMessage}");
+        var manager = VideoManager.Instance;
+        if (manager != null && manager.mediaPlayer == player) manager.FailPlayback();
+        else player.CloseMedia();
     }
 
     void OnDestroy()

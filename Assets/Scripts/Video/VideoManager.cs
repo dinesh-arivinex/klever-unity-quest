@@ -19,12 +19,10 @@ public class VideoManager : MonoBehaviour
     // public UnityEvent Action;
     public GoogleTextToSpeech googleTextToSpeech;
     //  public UnityEvent VideoEndAction;
-    private float duration;
     public StereoPacking stereoPackingMode = StereoPacking.TopBottom;
     private ServiceScript service;
     private string videoScript;
     private string videoSound;
-    private bool videoOpened = false;
     private string url;
    
     private float startTimer;
@@ -40,7 +38,12 @@ public class VideoManager : MonoBehaviour
     public AudioSource YoutubeAudioSource;
     public GameObject avpro;
     private bool isThreeSixty;
-    private Coroutine videoCoroutine;
+    private bool playbackActive;
+    private bool seekPending;
+    private bool narrationPending;
+    private bool playbackFinished;
+    private bool playbackFailed;
+    private bool subscribed;
 
     public UnityEvent youtubeURLGeneratedEvent;
     public static VideoManager Instance;
@@ -65,6 +68,7 @@ public class VideoManager : MonoBehaviour
 
     private void Update()
     {
+        if (playbackActive && !LessonPause.IsPaused) UpdatePlayback();
         if (mediaPlayer != null && mediaPlayer.gameObject.activeInHierarchy && mediaPlayer.Control != null && mediaPlayer.Info != null)
         {
             Klass.Net.LiveViewPublisher.Instance?.PublishPlayback(
@@ -110,112 +114,106 @@ public class VideoManager : MonoBehaviour
           }*/
     }
 
-    // Main play function
     public void PlayVideo()
     {
+        playbackActive = false;
+        mediaPlayer.CloseMedia();
         RestoreVideoAudio();
-        StopAllCoroutines();
-        CancelInvoke(nameof(Performe));
-        videoOpened = false;
-        videoCoroutine = null;
-        videoPlayerURL = PlayerPrefs.GetString(StaticStrings.videoUrl);
-        Klass.Net.LiveViewPublisher.Instance?.ShowContent("video", videoPlayerURL, videoPlayerURL);
-
-        if (string.IsNullOrEmpty(videoPlayerURL))
+        if (!subscribed)
         {
-            Debug.LogWarning("[VideoManager] No video URL found. Skipping video playback.");
-            if (GameManager.Instance != null && GameManager.Instance.EnableClassAndBoard != null)
-            {
-                GameManager.Instance.EnableClassAndBoard.Invoke();
-            }
-            if (googleTextToSpeech != null) googleTextToSpeech.StopAudio();
-            Performe();
+            mediaPlayer.Events.AddListener(OnPlaybackEvent);
+            subscribed = true;
+        }
+
+        videoPlayerURL = PlayerPrefs.GetString(StaticStrings.videoUrl);
+        videoScript = PlayerPrefs.GetString(StaticStrings.videoScript);
+        videoSound = PlayerPrefs.GetString(StaticStrings.videoSound);
+        bool isYouTube = !string.IsNullOrEmpty(youtubeURL);
+        playbackFailed = string.IsNullOrWhiteSpace(videoPlayerURL) || (isYouTube && youtubeVideoStatus == "failed");
+        playbackActive = true;
+        playbackFinished = false;
+        seekPending = isYouTube && startTimer > 0f;
+        narrationPending = !string.IsNullOrEmpty(videoScript) && videoSound != "mute";
+        if (playbackFailed) return;
+
+        Klass.Net.LiveViewPublisher.Instance?.ShowContent("video", videoPlayerURL, videoPlayerURL);
+        youtubeURLGeneratedEvent.Invoke();
+        if (isYouTube) GameManager.Instance.DisableClassAndBoard.Invoke();
+        mediaPlayer.gameObject.SetActive(true);
+        transform.GetChild(0).gameObject.SetActive(true);
+        youtubePlayer.SetActive(false);
+        mediaPlayer.Loop = false;
+        if (narrationPending) MuteVolumn();
+        if (!mediaPlayer.OpenMedia(new MediaPath(videoPlayerURL, MediaPathType.AbsolutePathOrURL), autoPlay: false))
+            playbackFailed = true;
+        waitingToStart = true;
+    }
+
+    private bool waitingToStart;
+
+    private void UpdatePlayback()
+    {
+        if (playbackFailed)
+        {
+            FailPlayback();
             return;
         }
 
-        if (!string.IsNullOrEmpty(youtubeURL))
+        var control = mediaPlayer.Control;
+        var info = mediaPlayer.Info;
+        if (control == null || info == null) return;
+        if (waitingToStart && control.CanPlay() && (!seekPending || info.GetDuration() > 0))
         {
-            // Case: YouTube URL is provided
-            if (youtubeVideoStatus != "failed")
-            {
-                youtubeURLGeneratedEvent.Invoke();
-                // Case: Backend successfully generated a downloadable YouTube URL
-                Debug.Log($"[YouTube] Valid download URL found. Starting video from {startTimer}s to {endTimer}s.");
-                GameManager.Instance.DisableClassAndBoard.Invoke();
-                mediaPlayer.gameObject.SetActive(true);
-                this.gameObject.transform.GetChild(0).gameObject.SetActive(true);
-                videoScript = PlayerPrefs.GetString(StaticStrings.videoScript);
-                videoSound = PlayerPrefs.GetString(StaticStrings.videoSound);
-                //videoPlayer.gameObject.SetActive(true);
-                //videoPlayer.source = VideoSource.Url;
-                //videoPlayer.url = videoPlayerURL;
-                bool isOpening = mediaPlayer.OpenMedia(new MediaPath(videoPlayerURL, MediaPathType.AbsolutePathOrURL), autoPlay: true);
-                videoOpened = isOpening;
-                // Use startTimer and endTimer from AssignYoutubeProperty
-                StartCoroutine(OpenVideoAndSeek(startTimer, endTimer));
-            }
-            else
-            {
-                //avpro.SetActive(false);
-                //ChangeSkyBox.SetSkybox(skyBox_VideoPlaye_Mat);
-                //videoPlayer.gameObject.SetActive(true);
-                //videoPlayer.source = VideoSource.Url;
-                //videoPlayer.url = videoPlayerURL;
-                //videoPlayer.Play();
-                GameManager.Instance.EnableClassAndBoard.Invoke();
-                // Case: Backend failed to generate a downloadable YouTube URL
-                Debug.LogError("[YouTube] Download URL not generated. Please verify backend YouTube URL generation logic.");
-                // Optional: trigger fallback logic
-                googleTextToSpeech.StopAudio();
-                Performe();
-            }
+            waitingToStart = false;
+            if (seekPending && startTimer < info.GetDuration())
+                control.Seek(startTimer);
+            control.Play();
+            return;
         }
-        else
+        if (waitingToStart) return;
+        if (narrationPending && control.IsPlaying())
         {
-            youtubeURLGeneratedEvent.Invoke();
-            mediaPlayer.gameObject.SetActive(true);
-            videoScript = PlayerPrefs.GetString(StaticStrings.videoScript);
-            videoSound = PlayerPrefs.GetString(StaticStrings.videoSound);
-            this.gameObject.transform.GetChild(0).gameObject.SetActive(true);
-            youtubePlayer.gameObject.SetActive(false);
-
-            bool isOpening = mediaPlayer.OpenMedia(new MediaPath(videoPlayerURL, MediaPathType.AbsolutePathOrURL), autoPlay: true);
-            videoOpened = isOpening;
-
-            StartCoroutine(OpenVideo());
+            narrationPending = false;
+            googleTextToSpeech.StartTalking(videoScript);
         }
+        if (!PlaybackComplete(playbackFinished || control.IsFinished(), control.GetCurrentTime(),
+                info.GetDuration(), !string.IsNullOrEmpty(youtubeURL), startTimer, endTimer)) return;
+
+        Debug.Log($"[QUEST-VIDEO] Playback completed at {control.GetCurrentTime():F2}/{info.GetDuration():F2}s.");
+        playbackActive = false;
+        mediaPlayer.CloseMedia();
+        googleTextToSpeech.StopAudio();
+        Klass.Net.LiveViewPublisher.Instance?.CompleteContent("video");
+        service.AssignTaskBasedOnCondition(GameStatus.threesixtyImage);
     }
 
-    private IEnumerator OpenVideoAndSeek(double startTime, double endTime)
+    public static bool PlaybackComplete(bool finished, double time, double duration, bool isYouTube, double start, double end)
     {
-        // Wait until video is opened and ready
-        while (!mediaPlayer.Control.IsPlaying() && !mediaPlayer.Control.IsFinished())
-        {
-            yield return null;
-        }
+        return finished || (isYouTube && duration > 0 && end > start && end < duration && time >= end);
+    }
 
-        // Wait for duration to become available
-        while (mediaPlayer.Info.GetDuration() <= 0)
-        {
-            yield return null;
-        }
+    private void OnPlaybackEvent(MediaPlayer player, MediaPlayerEvent.EventType eventType, ErrorCode error)
+    {
+        if (!playbackActive) return;
+        if (eventType == MediaPlayerEvent.EventType.FinishedPlaying) playbackFinished = true;
+        if (eventType == MediaPlayerEvent.EventType.Error) playbackFailed = true;
+    }
 
-        double duration = mediaPlayer.Info.GetDuration();
-        IsAudioNullInVideo();
-        // Clamp start and end times within video duration
-        startTime = Mathf.Clamp((float)startTime, 0f, (float)duration);
-        endTime = Mathf.Clamp((float)endTime, 0f, (float)duration);
+    private void OnDestroy()
+    {
+        if (subscribed && mediaPlayer != null) mediaPlayer.Events.RemoveListener(OnPlaybackEvent);
+    }
 
-        // Seek to start time
-        mediaPlayer.Control.Seek(startTime);
-        mediaPlayer.Control.Play();
-
-        // Automatically stop at end time
-        if (endTime > startTime)
-        {
-            yield return new WaitUntil(() => mediaPlayer.Control.GetCurrentTime() >= endTime);
-            mediaPlayer.Control.Pause();
-        }
+    public void FailPlayback()
+    {
+        if (!playbackActive) return;
+        playbackActive = false;
+        mediaPlayer.CloseMedia();
+        googleTextToSpeech.StopAudio();
+        Klass.Net.LiveViewPublisher.Instance?.HideContent("video-playback-error");
+        GameManager.Instance.EnableClassAndBoard.Invoke();
+        GameManager.Instance.deviceSynHandler?.PublishDownloadError("The headset could not play the lesson video.");
+        service.AssignTaskBasedOnCondition(GameStatus.threesixtyImage);
     }
 
     public void AssignYoutubeProperty(string youTubeStartTimer, string youTubeEndTimer, bool youTubeVideoAudio, string youtubeUrl, string youtubeDownloadableUrl, string script, string status)
@@ -289,33 +287,6 @@ public class VideoManager : MonoBehaviour
 
 
 
- IEnumerator OpenVideo()
-    {
-        yield return new WaitUntil(() => videoOpened);
-        IsAudioNullInVideo();
-    }
-    public void IsAudioNullInVideo()
-    {
-        
-        if (string.IsNullOrEmpty(videoScript)||videoSound=="mute")
-        {
-            RestoreVideoAudio();
-            //   GetMediaInfo();
-            StartCoroutine(GetMediaInfo());
-
-        }
-        else
-        {
-           StartCoroutine(AssinOperation());
-            MuteVolumn();
-
-
-        }
-
-
-
-    }
-
     public void RestoreVideoAudio()
     {
         if (mediaPlayer == null) return;
@@ -335,143 +306,6 @@ public class VideoManager : MonoBehaviour
     {
         ytbPlayer.startFromSecondTime= (int)startTimer;
     }
-    private IEnumerator GetMediaInfo()
-    {
-        // Wait until media duration becomes available
-        yield return new WaitUntil(() => mediaPlayer.Info.GetDuration() > 0);
-
-        double durationDouble = mediaPlayer.Info.GetDuration();
-        duration = (float)durationDouble;
-
-        // Case 1: YouTube video with valid start & end time
-        if (!string.IsNullOrEmpty(youtubeURL) && endTimer > 0)
-        {
-            // Clamp values within duration
-            startTimer = Mathf.Clamp(startTimer, 0f, duration);
-            endTimer = Mathf.Clamp(endTimer, 0f, duration);
-
-            // Calculate the segment playback duration
-            float segmentDuration = endTimer - startTimer;
-
-            Debug.Log($"[YouTube] Media info ready. Duration: {duration}s | Start: {startTimer}s | End: {endTimer}s | Segment: {segmentDuration}s");
-
-            // Seek to the start time before activating next logic
-            if (mediaPlayer.Control != null)
-            {
-                mediaPlayer.Control.Seek(startTimer);
-                mediaPlayer.Control.Play();
-            }
-
-            // Wait only for the segment duration
-            //yield return new WaitForSeconds(segmentDuration);
-            StartCoroutine(ActivateVideoEndAction(segmentDuration));
-        }
-        else
-        {
-            // Case 2: Normal full video playback
-            Debug.Log($"[Video] Media info ready. Duration: {duration}s | Playing full video...");
-            //yield return new WaitForSeconds(duration);
-            StartCoroutine(ActivateVideoEndAction(duration));
-        }
-       
-    }
-
-    private IEnumerator ActivateVideoEndAction(float duration)
-    {
-        yield return new WaitForSeconds(duration);
-        Klass.Net.LiveViewPublisher.Instance?.CompleteContent("video");
-        if (!isThreeSixty)
-        {
-            service.AssignTaskBasedOnCondition(GameStatus.NoAudioInVideo);
-        }
-        else
-        {
-            service.AssignTaskBasedOnCondition(GameStatus.threesixtyImage);
-        }
-
-
-        // VideoEndAction.Invoke();
-    }
-    public void Performe()
-    {
-        Klass.Net.LiveViewPublisher.Instance?.CompleteContent("video");
-        if(videoCoroutine!=null)
-        {
-            StopCoroutine(videoCoroutine);
-            videoCoroutine = null;
-        }
-     
-        if (GameManager.Instance.isImageSkip)
-        {
-            if (!GameManager.Instance.isModelSkip)
-            {
-                service.AssignTaskBasedOnCondition(GameStatus.SkipModel);
-            }
-            else
-            {
-                service.AssignTaskBasedOnCondition(GameStatus.WithoutSkipModel);
-            }
-            //service.AssignTaskBasedOnCondition(GameStatus.threesixtyImage);
-        }
-        else
-        {
-            service.AssignTaskBasedOnCondition(GameStatus.threesixtyImage);
-        }
-
-       
-        // Action.Invoke();
-    }
-   
-    private IEnumerator AssinOperation()
-    {     
-            googleTextToSpeech.StartTalking(videoScript);
-            yield return new WaitUntil(() => googleTextToSpeech.IsAudioReady);
-           videoCoroutine = StartCoroutine(IsVideoEndFirst());
-            Invoke("Performe", googleTextToSpeech.audioClipLength);         
-    }
-    IEnumerator IsVideoEndFirst()
-    {
-        // Wait until video duration is available
-        yield return new WaitUntil(() => mediaPlayer.Info.GetDuration() > 0);
-
-        double durationSeconds = mediaPlayer.Info.GetDuration();
-        duration = (float)durationSeconds;
-
-        // Case 1: YouTube video with start/end times
-        if (!string.IsNullOrEmpty(youtubeURL) && endTimer > 0)
-        {
-            // Clamp values within duration
-            startTimer = Mathf.Clamp(startTimer, 0f, duration);
-            endTimer = Mathf.Clamp(endTimer, 0f, duration);
-
-            // Calculate playback time (only the part between start and end)
-            float playTime = endTimer - startTimer;
-
-            Debug.Log($"[YouTube] Video duration: {duration}s | Start: {startTimer}s | End: {endTimer}s | Play segment: {playTime}s");
-
-            // Wait for the selected segment duration
-            yield return new WaitForSeconds(playTime);
-        }
-        else
-        {
-            // Case 2: Normal full-length video
-            Debug.Log($"[Video] Full duration: {duration}s | Playing entire clip...");
-            yield return new WaitForSeconds(duration);
-        }
-
-        Klass.Net.LiveViewPublisher.Instance?.CompleteContent("video");
-        // After video ends, trigger appropriate game
-        
-        if (!isThreeSixty)
-        {
-            service.AssignTaskBasedOnCondition(GameStatus.VideoEndFirst);
-        }
-        else
-        {
-            service.AssignTaskBasedOnCondition(GameStatus.VideoEndFirst);
-        }
-    }
-
     void OnPrepareCompleted(VideoPlayer source)
     {
         Seek();
@@ -496,7 +330,7 @@ public class VideoManager : MonoBehaviour
         // Pause or stop the video
         videoPlayer.Pause(); // or videoPlayer.Stop() if you want to stop it completely
         youtubePlayer.SetActive(false);
-        Performe();
+        service.AssignTaskBasedOnCondition(GameStatus.threesixtyImage);
     }
     public class ChangeSkyBox
     {

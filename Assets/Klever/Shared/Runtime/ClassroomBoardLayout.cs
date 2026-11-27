@@ -42,6 +42,39 @@ namespace Klever.VR
                 Height=b.size[vertical]*Mathf.Abs(Vector3.Dot(axes[vertical],up)),
                 Depth=b.extents[thin]*Mathf.Abs(Vector3.Dot(axes[thin],forward))};
         }
+#if KLEVER_DPN
+        // DPVR's board projection must never reposition the authored Quest WebView.
+        public static void FitSimulation(RectTransform viewport, Renderer surface, Vector3 viewer, RectTransform next = null, RectTransform clock = null)
+        {
+            var frame = Measure(surface, viewer);
+            if (frame.Width < 0.2f || frame.Height < 0.2f) return;
+            // Keep the simulation screen large and place compact clock / Next pills cleanly below it.
+            var face = frame.Center - frame.Forward * (frame.Depth + 0.008f);
+            FitBoardRect(viewport, frame.Rotation, face + frame.Up * (frame.Height * 0.045f),
+                frame.Width * 0.96f, frame.Height * 0.86f);
+            var footerCenter = face - frame.Up * (frame.Height * 0.442f);
+            if (clock != null)
+                FitBoardRect(clock, frame.Rotation, footerCenter - frame.Right * (frame.Width * 0.35f),
+                    frame.Width * 0.24f, frame.Height * 0.065f);
+            if (next != null)
+                FitBoardRect(next, frame.Rotation, footerCenter + frame.Right * (frame.Width * 0.39f),
+                    frame.Width * 0.16f, frame.Height * 0.065f);
+        }
+
+        private static void FitBoardRect(RectTransform rect, Quaternion rotation, Vector3 center, float maxWidth, float maxHeight)
+        {
+            var bounds = rect.rect;
+            if (bounds.width <= 0 || bounds.height <= 0) return;
+            rect.rotation = rotation;
+            float width = rect.TransformVector(Vector3.right * bounds.width).magnitude;
+            float height = rect.TransformVector(Vector3.up * bounds.height).magnitude;
+            if (width <= 0.00001f || height <= 0.00001f) return;
+            float factor = Mathf.Min(maxWidth / width, maxHeight / height);
+            if (Mathf.Abs(factor - 1f) > 0.00001f) rect.localScale *= factor;
+            rect.position += center - rect.TransformPoint(bounds.center);
+        }
+
+#endif
         public static void Fit(RectTransform rect, Renderer surface, Vector3 viewer)
         {
             var frame=Measure(surface,viewer);

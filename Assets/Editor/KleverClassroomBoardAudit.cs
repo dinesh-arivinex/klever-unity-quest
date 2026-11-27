@@ -47,6 +47,34 @@ namespace Klever.VR.Editor
     }
     Canvas.ForceUpdateCanvases();
     foreach(var text in panel.GetComponentsInChildren<TMP_Text>()) {text.ForceMeshUpdate(); if(text.isTextOverflowing) throw new Exception("Instruction text overflows: "+text.name);}
+    var web = room.webManager;
+    var viewport = (RectTransform)web._webViewPrefab.transform;
+    var next = (RectTransform)web.buttonNext.transform;
+    var clock = (RectTransform)web.timer.transform.parent;
+    var controls = new[] { viewport, next, clock };
+    var positions = controls.Select(control => control.localPosition).ToArray();
+    var rotations = controls.Select(control => control.localRotation).ToArray();
+    var scales = controls.Select(control => control.localScale).ToArray();
+    var sizes = controls.Select(control => control.sizeDelta).ToArray();
+    var components = web.webView.GetComponentsInChildren<Component>(true).Length;
+    for (int repeat = 0; repeat < 20; repeat++) web.PrepareEmbeddedView();
+    if (Vector3.Distance(web.simulation.transform.position, web.temp.transform.position) > 0.000001f ||
+        Quaternion.Angle(web.simulation.transform.rotation, web.temp.transform.rotation) > 0.001f)
+     throw new Exception("Quest WebView missed its authored classroom anchor.");
+    if (web.webView.GetComponentsInChildren<Component>(true).Length != components)
+     throw new Exception("Quest WebView added replacement pointer controls.");
+    for (int controlIndex = 0; controlIndex < controls.Length; controlIndex++)
+    {
+     var control = controls[controlIndex];
+     if (Vector3.Distance(control.localPosition, positions[controlIndex]) > 0.000001f ||
+         Quaternion.Angle(control.localRotation, rotations[controlIndex]) > 0.001f ||
+         Vector3.Distance(control.localScale, scales[controlIndex]) > 0.000001f ||
+         Vector2.Distance(control.sizeDelta, sizes[controlIndex]) > 0.000001f)
+      throw new Exception("Quest WebView changed authored geometry in room " + index + ": " + control.name);
+    }
+    if (Quaternion.Angle(selected.transform.rotation, originalRotation) > 0.001f)
+     throw new Exception("Quest simulation changed the classroom board geometry.");
+    Debug.Log("[QUEST-WEBVIEW-AUDIT] room=" + (index + 1) + " authored floating canvas, controls and anchor preserved PASS");
     var brand=ClassroomBranding.Configure(room); brand.Refresh();
     if(brand.Badge.GetComponentsInChildren<Graphic>(true).Any(g=>g.raycastTarget) || brand.Badge.GetComponentsInChildren<Collider>(true).Length>0) throw new Exception("Branding blocks interactions.");
     if(!brand.Badge.gameObject.activeSelf)throw new Exception("Logo hidden in visible classroom.");
